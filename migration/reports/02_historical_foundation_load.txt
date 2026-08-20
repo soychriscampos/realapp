@@ -1,0 +1,25 @@
+ETL 02 - Historical Foundation Load
+===================================
+
+Cycle: 25-26 (7de96d7a-ab40-437e-9101-c118706aa3e7)
+
+Operations:
+Students inserted: 96
+Students updated: 3
+Guardians inserted: 132
+Guardians updated: 0
+Student guardians inserted: 163
+Student guardians updated: 0
+Enrollments inserted: 99
+Enrollments updated: 0
+
+Final counts:
+Legacy students: 99
+Legacy guardians: 132
+Student guardian relationships: 163
+Enrollments 25-26: 99
+
+Students with birth_date: 0
+Guardians with email: 0
+
+VALIDATION: PASS

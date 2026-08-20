@@ -1,0 +1,29 @@
+ETL 04 - Historical Finance Load
+================================
+
+Cycle: 25-26
+
+OPERATIONS
+Agreements inserted: 195
+Agreements updated: 0
+Charges inserted: 1210
+Charges updated: 0
+Payments inserted: 571
+Payments updated: 0
+Allocations inserted: 702
+Allocations updated: 0
+
+FINAL COUNTS
+Agreements: 195
+Charges: 1210
+Payments: 571
+Allocations: 702
+
+MONEY
+Confirmed payments: $905100.00
+Active allocations: $905100.00
+Active charge total: $1371300.00
+Derived outstanding: $466200.00
+Staging outstanding: $466200.00
+
+VALIDATION: PASS

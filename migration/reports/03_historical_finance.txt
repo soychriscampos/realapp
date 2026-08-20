@@ -1,0 +1,38 @@
+ETL 03 - Historical Finance Preparation
+=======================================
+
+SOURCE
+Payments: 567
+Payment applications: 559
+Price rows: 195
+
+PREPARED
+Financial agreements: 195
+Tuition charges: 1128
+Enrollment fee charges: 82
+Total charges: 1210
+Payments: 571
+Payment allocations: 702
+Credit candidates: 0
+
+MONEY
+Legacy payment total: $896100.00
+Manual historical backfills: $9000.00
+Prepared payment total: $905100.00
+Allocation total: $905100.00
+Unallocated / credit candidate total: $0.00
+
+ANOMALIES
+Errors: 0
+Warnings: 4
+Info: 92
+
+KNOWN CORRECTION: Adriana Guzmán Castro SEP allocation relinked to correct tuition payment.
+VERIFIED ENROLLMENT CORRECTIONS: A-0035=2500, A-0108=1000, A-0018=2400, A-0024=1100.
+VERIFIED DATE CORRECTION: A-0024 pre-registration payment moved from 2025-02-28 to 2024-02-28.
+VERIFIED TUITION CORRECTION: A-0106 November payment/application corrected from SEP to NOV.
+LATE ENTRY RULE: tuition periods before the first tuition valid_from are not generated.
+
+BAJA RULE: no withdrawal date was invented. Tuition charges for BAJA students were prepared only for legacy periods evidenced by applications.
+
+VALIDATION: PASS

@@ -1,0 +1,902 @@
+[
+    {
+        "table_name": "alumno_contacto",
+        "ordinal_position": 1,
+        "column_name": "alumno_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "alumno_contacto",
+        "ordinal_position": 2,
+        "column_name": "tutor_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "alumno_contacto",
+        "ordinal_position": 3,
+        "column_name": "parentesco",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "alumno_contacto",
+        "ordinal_position": 4,
+        "column_name": "prioridad",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "alumno_contacto",
+        "ordinal_position": 5,
+        "column_name": "via_whatsapp",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "YES",
+        "column_default": "false"
+    },
+    {
+        "table_name": "alumno_contacto",
+        "ordinal_position": 6,
+        "column_name": "via_email",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "YES",
+        "column_default": "false"
+    },
+    {
+        "table_name": "alumno_contacto",
+        "ordinal_position": 7,
+        "column_name": "consentimiento_mensajes",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "YES",
+        "column_default": "false"
+    },
+    {
+        "table_name": "alumno_contacto",
+        "ordinal_position": 8,
+        "column_name": "recibe_factura",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "YES",
+        "column_default": "false"
+    },
+    {
+        "table_name": "alumno_contacto",
+        "ordinal_position": 9,
+        "column_name": "creado",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "YES",
+        "column_default": "now()"
+    },
+    {
+        "table_name": "alumnos",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+    },
+    {
+        "table_name": "alumnos",
+        "ordinal_position": 2,
+        "column_name": "alumno_code",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "alumnos",
+        "ordinal_position": 3,
+        "column_name": "nombre_completo",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "alumnos",
+        "ordinal_position": 4,
+        "column_name": "sexo",
+        "data_type": "USER-DEFINED",
+        "udt_name": "sexo_t",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "alumnos",
+        "ordinal_position": 5,
+        "column_name": "nivel",
+        "data_type": "USER-DEFINED",
+        "udt_name": "nivel_t",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "alumnos",
+        "ordinal_position": 6,
+        "column_name": "grado",
+        "data_type": "smallint",
+        "udt_name": "int2",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "alumnos",
+        "ordinal_position": 8,
+        "column_name": "estatus",
+        "data_type": "USER-DEFINED",
+        "udt_name": "estatus_alumno_t",
+        "is_nullable": "NO",
+        "column_default": "'ACTIVO'::estatus_alumno_t"
+    },
+    {
+        "table_name": "alumnos",
+        "ordinal_position": 9,
+        "column_name": "oficial_sep",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "false"
+    },
+    {
+        "table_name": "alumnos",
+        "ordinal_position": 10,
+        "column_name": "creado_en",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "now()"
+    },
+    {
+        "table_name": "alumnos",
+        "ordinal_position": 11,
+        "column_name": "actualizado_en",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "now()"
+    },
+    {
+        "table_name": "alumnos",
+        "ordinal_position": 12,
+        "column_name": "fecha_nacimiento",
+        "data_type": "date",
+        "udt_name": "date",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "alumnos_busqueda",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "alumnos_busqueda",
+        "ordinal_position": 2,
+        "column_name": "nombre_completo",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "alumnos_busqueda",
+        "ordinal_position": 3,
+        "column_name": "nivel",
+        "data_type": "USER-DEFINED",
+        "udt_name": "nivel_t",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "alumnos_busqueda",
+        "ordinal_position": 4,
+        "column_name": "grado",
+        "data_type": "smallint",
+        "udt_name": "int2",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "alumnos_busqueda",
+        "ordinal_position": 5,
+        "column_name": "nombre_idx",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "calendario_ciclo",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+    },
+    {
+        "table_name": "calendario_ciclo",
+        "ordinal_position": 2,
+        "column_name": "ciclo_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "calendario_ciclo",
+        "ordinal_position": 3,
+        "column_name": "orden",
+        "data_type": "smallint",
+        "udt_name": "int2",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "calendario_ciclo",
+        "ordinal_position": 4,
+        "column_name": "periodo",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "calendario_ciclo",
+        "ordinal_position": 5,
+        "column_name": "meses_incluidos",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "calendario_ciclo",
+        "ordinal_position": 6,
+        "column_name": "multiplicador",
+        "data_type": "smallint",
+        "udt_name": "int2",
+        "is_nullable": "NO",
+        "column_default": "1"
+    },
+    {
+        "table_name": "calendario_ciclo",
+        "ordinal_position": 7,
+        "column_name": "tipo",
+        "data_type": "USER-DEFINED",
+        "udt_name": "tipo_periodo_t",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "calendario_ciclo",
+        "ordinal_position": 8,
+        "column_name": "fecha_vencimiento",
+        "data_type": "date",
+        "udt_name": "date",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "ciclos",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+    },
+    {
+        "table_name": "ciclos",
+        "ordinal_position": 2,
+        "column_name": "ciclo",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "ciclos",
+        "ordinal_position": 3,
+        "column_name": "fecha_inicio",
+        "data_type": "date",
+        "udt_name": "date",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "ciclos",
+        "ordinal_position": 4,
+        "column_name": "fecha_fin",
+        "data_type": "date",
+        "udt_name": "date",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "contactos",
+        "ordinal_position": 1,
+        "column_name": "tutor_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+    },
+    {
+        "table_name": "contactos",
+        "ordinal_position": 2,
+        "column_name": "nombre",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "contactos",
+        "ordinal_position": 3,
+        "column_name": "whatsapp",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "contactos",
+        "ordinal_position": 4,
+        "column_name": "email",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "contactos",
+        "ordinal_position": 5,
+        "column_name": "rfc",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "contactos",
+        "ordinal_position": 6,
+        "column_name": "razon_social",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "contactos",
+        "ordinal_position": 7,
+        "column_name": "cp_fiscal",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "contactos",
+        "ordinal_position": 8,
+        "column_name": "regimen_fiscal",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "contactos",
+        "ordinal_position": 9,
+        "column_name": "uso_cfdi",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "contactos",
+        "ordinal_position": 10,
+        "column_name": "creado",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "YES",
+        "column_default": "now()"
+    },
+    {
+        "table_name": "padres_cuentas",
+        "ordinal_position": 1,
+        "column_name": "tutor_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "padres_cuentas",
+        "ordinal_position": 2,
+        "column_name": "username",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "padres_cuentas",
+        "ordinal_position": 3,
+        "column_name": "pass_plain",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "padres_cuentas",
+        "ordinal_position": 4,
+        "column_name": "pass_hash",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "padres_cuentas",
+        "ordinal_position": 5,
+        "column_name": "activo",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+    },
+    {
+        "table_name": "padres_cuentas",
+        "ordinal_position": 6,
+        "column_name": "creado",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "now()"
+    },
+    {
+        "table_name": "pago_aplicaciones",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+    },
+    {
+        "table_name": "pago_aplicaciones",
+        "ordinal_position": 2,
+        "column_name": "pago_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "pago_aplicaciones",
+        "ordinal_position": 3,
+        "column_name": "alumno_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "pago_aplicaciones",
+        "ordinal_position": 4,
+        "column_name": "ciclo_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "pago_aplicaciones",
+        "ordinal_position": 5,
+        "column_name": "periodo",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "pago_aplicaciones",
+        "ordinal_position": 6,
+        "column_name": "monto_aplicado",
+        "data_type": "numeric",
+        "udt_name": "numeric",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 2,
+        "column_name": "pago_code",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 3,
+        "column_name": "alumno_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 4,
+        "column_name": "ciclo_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 5,
+        "column_name": "fecha_pago",
+        "data_type": "date",
+        "udt_name": "date",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 6,
+        "column_name": "monto_total",
+        "data_type": "numeric",
+        "udt_name": "numeric",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 7,
+        "column_name": "tipo_de_pago",
+        "data_type": "USER-DEFINED",
+        "udt_name": "tipo_pago_t",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 8,
+        "column_name": "metodo_de_pago",
+        "data_type": "USER-DEFINED",
+        "udt_name": "metodo_pago_t",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 9,
+        "column_name": "recibio",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 10,
+        "column_name": "observaciones",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 11,
+        "column_name": "comprobante_url",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 12,
+        "column_name": "origen",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 13,
+        "column_name": "agradecimiento_enviado",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "false"
+    },
+    {
+        "table_name": "pagos",
+        "ordinal_position": 14,
+        "column_name": "creado_en",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "now()"
+    },
+    {
+        "table_name": "parametros",
+        "ordinal_position": 1,
+        "column_name": "parametro",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "parametros",
+        "ordinal_position": 2,
+        "column_name": "valor",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "precios_alumno",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+    },
+    {
+        "table_name": "precios_alumno",
+        "ordinal_position": 2,
+        "column_name": "alumno_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "precios_alumno",
+        "ordinal_position": 3,
+        "column_name": "concepto",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": "'COLEGIATURA'::text"
+    },
+    {
+        "table_name": "precios_alumno",
+        "ordinal_position": 4,
+        "column_name": "vigencia_desde",
+        "data_type": "date",
+        "udt_name": "date",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "precios_alumno",
+        "ordinal_position": 7,
+        "column_name": "importe_base",
+        "data_type": "numeric",
+        "udt_name": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+    },
+    {
+        "table_name": "precios_alumno",
+        "ordinal_position": 9,
+        "column_name": "notas",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "usuarios_plat",
+        "ordinal_position": 1,
+        "column_name": "id_user",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+    },
+    {
+        "table_name": "usuarios_plat",
+        "ordinal_position": 2,
+        "column_name": "username",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "usuarios_plat",
+        "ordinal_position": 3,
+        "column_name": "pass",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "usuarios_plat",
+        "ordinal_position": 4,
+        "column_name": "type",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "usuarios_plat",
+        "ordinal_position": 5,
+        "column_name": "activo",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+    },
+    {
+        "table_name": "usuarios_plat",
+        "ordinal_position": 6,
+        "column_name": "creado_en",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "now()"
+    },
+    {
+        "table_name": "usuarios_plat",
+        "ordinal_position": 7,
+        "column_name": "sexo",
+        "data_type": "USER-DEFINED",
+        "udt_name": "sexo_t",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "v_pagos_whatsapp",
+        "ordinal_position": 1,
+        "column_name": "pago_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "v_pagos_whatsapp",
+        "ordinal_position": 2,
+        "column_name": "alumno_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "v_pagos_whatsapp",
+        "ordinal_position": 3,
+        "column_name": "alumno_nombre",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "v_pagos_whatsapp",
+        "ordinal_position": 4,
+        "column_name": "fecha_dd_mm_aa",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "v_pagos_whatsapp",
+        "ordinal_position": 5,
+        "column_name": "concepto",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "v_pagos_whatsapp",
+        "ordinal_position": 6,
+        "column_name": "tipo_de_pago_legible",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "v_pagos_whatsapp",
+        "ordinal_position": 7,
+        "column_name": "monto_formateado",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "v_pagos_whatsapp",
+        "ordinal_position": 8,
+        "column_name": "detalles",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "v_pagos_whatsapp",
+        "ordinal_position": 9,
+        "column_name": "whatsapp_destino",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "vw_aplicado_por_periodo",
+        "ordinal_position": 1,
+        "column_name": "alumno_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "vw_aplicado_por_periodo",
+        "ordinal_position": 2,
+        "column_name": "ciclo_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "vw_aplicado_por_periodo",
+        "ordinal_position": 3,
+        "column_name": "periodo",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    }
+]

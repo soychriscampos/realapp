@@ -1,0 +1,902 @@
+[
+    {
+        "table_name": "audit_log",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "extensions.gen_random_uuid()"
+    },
+    {
+        "table_name": "audit_log",
+        "ordinal_position": 2,
+        "column_name": "actor_profile_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "audit_log",
+        "ordinal_position": 3,
+        "column_name": "action",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "audit_log",
+        "ordinal_position": 4,
+        "column_name": "entity_schema",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": "'public'::text"
+    },
+    {
+        "table_name": "audit_log",
+        "ordinal_position": 5,
+        "column_name": "entity_name",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "audit_log",
+        "ordinal_position": 6,
+        "column_name": "entity_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "audit_log",
+        "ordinal_position": 7,
+        "column_name": "old_values",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "audit_log",
+        "ordinal_position": 8,
+        "column_name": "new_values",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "audit_log",
+        "ordinal_position": 9,
+        "column_name": "reason",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "audit_log",
+        "ordinal_position": 10,
+        "column_name": "correlation_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "extensions.gen_random_uuid()"
+    },
+    {
+        "table_name": "audit_log",
+        "ordinal_position": 11,
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "education_levels",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "extensions.gen_random_uuid()"
+    },
+    {
+        "table_name": "education_levels",
+        "ordinal_position": 2,
+        "column_name": "code",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "education_levels",
+        "ordinal_position": 3,
+        "column_name": "name",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "education_levels",
+        "ordinal_position": 4,
+        "column_name": "sort_order",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "education_levels",
+        "ordinal_position": 5,
+        "column_name": "is_active",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+    },
+    {
+        "table_name": "education_levels",
+        "ordinal_position": 6,
+        "column_name": "legacy_level_id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "education_levels",
+        "ordinal_position": 7,
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "education_levels",
+        "ordinal_position": 8,
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "enrollment_classifications",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "extensions.gen_random_uuid()"
+    },
+    {
+        "table_name": "enrollment_classifications",
+        "ordinal_position": 2,
+        "column_name": "code",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollment_classifications",
+        "ordinal_position": 3,
+        "column_name": "name",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollment_classifications",
+        "ordinal_position": 4,
+        "column_name": "counts_for_sep",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollment_classifications",
+        "ordinal_position": 5,
+        "column_name": "counts_for_campus",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollment_classifications",
+        "ordinal_position": 6,
+        "column_name": "participates_financially",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollment_classifications",
+        "ordinal_position": 7,
+        "column_name": "is_active",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+    },
+    {
+        "table_name": "enrollment_classifications",
+        "ordinal_position": 8,
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "enrollment_classifications",
+        "ordinal_position": 9,
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "enrollment_events",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "extensions.gen_random_uuid()"
+    },
+    {
+        "table_name": "enrollment_events",
+        "ordinal_position": 2,
+        "column_name": "enrollment_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollment_events",
+        "ordinal_position": 3,
+        "column_name": "event_type",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollment_events",
+        "ordinal_position": 4,
+        "column_name": "effective_on",
+        "data_type": "date",
+        "udt_name": "date",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollment_events",
+        "ordinal_position": 5,
+        "column_name": "reason",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollment_events",
+        "ordinal_position": 6,
+        "column_name": "notes",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollment_events",
+        "ordinal_position": 7,
+        "column_name": "old_values",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollment_events",
+        "ordinal_position": 8,
+        "column_name": "new_values",
+        "data_type": "jsonb",
+        "udt_name": "jsonb",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollment_events",
+        "ordinal_position": 9,
+        "column_name": "created_by_profile_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollment_events",
+        "ordinal_position": 10,
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "extensions.gen_random_uuid()"
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 2,
+        "column_name": "student_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 3,
+        "column_name": "cycle_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 4,
+        "column_name": "grade_level_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 5,
+        "column_name": "group_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 6,
+        "column_name": "classification_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 7,
+        "column_name": "status",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": "'PENDIENTE'::text"
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 8,
+        "column_name": "enrolled_on",
+        "data_type": "date",
+        "udt_name": "date",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 9,
+        "column_name": "classes_start_on",
+        "data_type": "date",
+        "udt_name": "date",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 10,
+        "column_name": "closed_on",
+        "data_type": "date",
+        "udt_name": "date",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 11,
+        "column_name": "legacy_enrollment_id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 12,
+        "column_name": "created_by_profile_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 13,
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "enrollments",
+        "ordinal_position": 14,
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "family_invitation_students",
+        "ordinal_position": 1,
+        "column_name": "invitation_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "family_invitation_students",
+        "ordinal_position": 2,
+        "column_name": "student_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "family_invitation_students",
+        "ordinal_position": 3,
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "family_invitations",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "extensions.gen_random_uuid()"
+    },
+    {
+        "table_name": "family_invitations",
+        "ordinal_position": 2,
+        "column_name": "tutor_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "family_invitations",
+        "ordinal_position": 3,
+        "column_name": "token_hash",
+        "data_type": "bytea",
+        "udt_name": "bytea",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "family_invitations",
+        "ordinal_position": 4,
+        "column_name": "status",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": "'PENDING'::text"
+    },
+    {
+        "table_name": "family_invitations",
+        "ordinal_position": 5,
+        "column_name": "expires_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "family_invitations",
+        "ordinal_position": 6,
+        "column_name": "accepted_by_profile_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "family_invitations",
+        "ordinal_position": 7,
+        "column_name": "accepted_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "family_invitations",
+        "ordinal_position": 8,
+        "column_name": "revoked_by_profile_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "family_invitations",
+        "ordinal_position": 9,
+        "column_name": "revoked_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "family_invitations",
+        "ordinal_position": 10,
+        "column_name": "revocation_reason",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "family_invitations",
+        "ordinal_position": 11,
+        "column_name": "created_by_profile_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "family_invitations",
+        "ordinal_position": 12,
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "family_invitations",
+        "ordinal_position": 13,
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "family_portal_access",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "extensions.gen_random_uuid()"
+    },
+    {
+        "table_name": "family_portal_access",
+        "ordinal_position": 2,
+        "column_name": "tutor_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "family_portal_access",
+        "ordinal_position": 3,
+        "column_name": "student_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "family_portal_access",
+        "ordinal_position": 4,
+        "column_name": "invitation_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "family_portal_access",
+        "ordinal_position": 5,
+        "column_name": "status",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": "'ACTIVE'::text"
+    },
+    {
+        "table_name": "family_portal_access",
+        "ordinal_position": 6,
+        "column_name": "activated_by_profile_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "family_portal_access",
+        "ordinal_position": 7,
+        "column_name": "activated_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "family_portal_access",
+        "ordinal_position": 8,
+        "column_name": "revoked_by_profile_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "family_portal_access",
+        "ordinal_position": 9,
+        "column_name": "revoked_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "family_portal_access",
+        "ordinal_position": 10,
+        "column_name": "revocation_reason",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "family_portal_access",
+        "ordinal_position": 11,
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "family_portal_access",
+        "ordinal_position": 12,
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "grade_levels",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "extensions.gen_random_uuid()"
+    },
+    {
+        "table_name": "grade_levels",
+        "ordinal_position": 2,
+        "column_name": "education_level_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "grade_levels",
+        "ordinal_position": 3,
+        "column_name": "code",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "grade_levels",
+        "ordinal_position": 4,
+        "column_name": "name",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "grade_levels",
+        "ordinal_position": 5,
+        "column_name": "sort_order",
+        "data_type": "integer",
+        "udt_name": "int4",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "grade_levels",
+        "ordinal_position": 6,
+        "column_name": "is_terminal",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "false"
+    },
+    {
+        "table_name": "grade_levels",
+        "ordinal_position": 7,
+        "column_name": "is_active",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+    },
+    {
+        "table_name": "grade_levels",
+        "ordinal_position": 8,
+        "column_name": "legacy_grade_id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "grade_levels",
+        "ordinal_position": 9,
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "grade_levels",
+        "ordinal_position": 10,
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "groups",
+        "ordinal_position": 1,
+        "column_name": "id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": "extensions.gen_random_uuid()"
+    },
+    {
+        "table_name": "groups",
+        "ordinal_position": 2,
+        "column_name": "cycle_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "groups",
+        "ordinal_position": 3,
+        "column_name": "grade_level_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "groups",
+        "ordinal_position": 4,
+        "column_name": "code",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "groups",
+        "ordinal_position": 5,
+        "column_name": "name",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "NO",
+        "column_default": null
+    },
+    {
+        "table_name": "groups",
+        "ordinal_position": 6,
+        "column_name": "is_active",
+        "data_type": "boolean",
+        "udt_name": "bool",
+        "is_nullable": "NO",
+        "column_default": "true"
+    },
+    {
+        "table_name": "groups",
+        "ordinal_position": 7,
+        "column_name": "legacy_group_id",
+        "data_type": "text",
+        "udt_name": "text",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "groups",
+        "ordinal_position": 8,
+        "column_name": "created_by_profile_id",
+        "data_type": "uuid",
+        "udt_name": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+    },
+    {
+        "table_name": "groups",
+        "ordinal_position": 9,
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    },
+    {
+        "table_name": "groups",
+        "ordinal_position": 10,
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "udt_name": "timestamptz",
+        "is_nullable": "NO",
+        "column_default": "statement_timestamp()"
+    }
+]

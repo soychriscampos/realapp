@@ -1,0 +1,12 @@
+id,ciclo_id,orden,periodo,meses_incluidos,multiplicador,tipo,fecha_vencimiento
+0954bc8f-140c-4d87-9b00-5b6e95cdcb70,fddaf8e9-6acb-4f4d-9e99-d57f7fba847d,6,ENE,Enero,1,Colegiatura,2026-01-05
+21343f89-7ea1-4fac-850a-c2eb880297b1,fddaf8e9-6acb-4f4d-9e99-d57f7fba847d,5,DIC/JUL,Diciembre + Julio,2,Colegiatura,2025-12-05
+26937cfd-9ff1-4ea1-b9cc-e08bea99ef77,fddaf8e9-6acb-4f4d-9e99-d57f7fba847d,3,OCT,Octubre,1,Colegiatura,2025-10-05
+3041edbf-bdc6-45a8-b728-b439efc57160,fddaf8e9-6acb-4f4d-9e99-d57f7fba847d,10,MAY,Mayo,1,Colegiatura,2026-05-05
+50f23ff8-1efe-4d0d-8e45-6809d446d788,fddaf8e9-6acb-4f4d-9e99-d57f7fba847d,11,JUN,Junio,1,Colegiatura,2026-06-05
+7b5060ac-1d3c-443b-ab3d-2a5d661084b0,fddaf8e9-6acb-4f4d-9e99-d57f7fba847d,4,NOV,Noviembre,1,Colegiatura,2025-11-05
+8bfd99e9-1d61-4a12-98e4-5b7d0def5285,fddaf8e9-6acb-4f4d-9e99-d57f7fba847d,9,ABR,Abril,1,Colegiatura,2026-04-05
+8cec42ba-f8ee-4c7a-ab2b-15f330986783,fddaf8e9-6acb-4f4d-9e99-d57f7fba847d,7,FEB,Febrero,1,Colegiatura,2026-02-05
+dc8caa73-2703-43b1-b8ac-a8be3a095060,fddaf8e9-6acb-4f4d-9e99-d57f7fba847d,1,INS,Inscripción,1,Inscripción,2025-09-05
+ee0784b1-985d-4a53-aaba-d77d4fa534e2,fddaf8e9-6acb-4f4d-9e99-d57f7fba847d,8,MAR/AGO,Marzo + Agosto,2,Colegiatura,2026-03-05
+f588d007-3ac6-4d4f-a173-8175d02cfbec,fddaf8e9-6acb-4f4d-9e99-d57f7fba847d,2,SEP,Septiembre,1,Colegiatura,2025-09-05

@@ -1,0 +1,21 @@
+ETL 05 - Historical Reconciliation
+==================================
+
+Students reviewed: 99
+
+MONEY
+Staging payments: $905100.00
+Target payments: $905100.00
+Staging allocations: $905100.00
+Target allocations: $905100.00
+Staging outstanding: $466200.00
+Target outstanding: $466200.00
+
+STUDENTS
+Outstanding balance: 63
+Zero balance: 36
+Enrollment fee pending: 11
+BAJA: 4
+Reconciliation differences: 0
+
+VALIDATION: PASS

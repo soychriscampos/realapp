@@ -1,0 +1,30 @@
+ETL 01 - Students / Guardians / Enrollments
+============================================
+
+Students: 99
+Guardians: 132
+Student-guardian relationships: 163
+Enrollments 25-26: 99
+
+Students without guardian: 6
+
+Enrollment status:
+status
+ACTIVA    95
+BAJA       4
+
+Classification:
+classification_code
+OFFICIAL_SEP    89
+CAMPUS          10
+
+Education level:
+education_level_code
+PRIMARIA      71
+PREESCOLAR    28
+
+Guardians per student:
+1    23
+2    70
+
+VALIDATION: PASS

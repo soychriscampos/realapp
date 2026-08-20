@@ -1,0 +1,29 @@
+ETL 06 - Outstanding Balance Review
+===================================
+
+Cycle: 25-26
+Students with balance: 63
+
+MONEY
+Total outstanding: $466200.00
+Tuition outstanding: $445400.00
+Enrollment outstanding: $20800.00
+Other outstanding: $0.00
+
+REVIEW
+High priority rows: 44
+Enrollment pending: 11
+BAJA with balance: 4
+3+ tuition periods open: 40
+
+Top 10 balances:
+- A-0058 | Mario de Jesús Rojas Partida | $21700.00
+- A-0102 | Fernanda Estefania Palomares Medrano | $21700.00
+- A-0048 | Alanis Lilian Barajas Ulloa | $20200.00
+- A-0080 | Ian Aleyze Fonseca Cortez | $20100.00
+- A-0027 | Jare Alejandro Romero Rincones | $16500.00
+- A-0039 | Dylan Quevedo Sánchez | $16000.00
+- A-0068 | Katherine Zoe Cruz Medina | $16000.00
+- A-0098 | Ana Sofía Montaño Altamirano | $16000.00
+- A-0095 | Leobardo Aguilar Domínguez | $15000.00
+- A-0064 | Fabel Omar Ibarra Rivera | $14300.00
