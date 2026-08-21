@@ -6,6 +6,7 @@ import { login } from './actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PasswordField } from './password-field'
 
 type LoginPageProps = {
   searchParams: Promise<{
@@ -41,21 +42,25 @@ export default async function LoginPage({
           : null
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-6">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
+    <main className="flex min-h-dvh items-center justify-center bg-[#f7f7f8] px-5 py-10 sm:px-6">
+      <div className="w-full max-w-[360px]">
+        <div className="mb-10 text-center">
+          <div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-xl border border-border bg-white text-lg font-semibold tracking-tight">
+            REAL
+          </div>
+
           <h1 className="text-2xl font-semibold tracking-tight">
-            Colegio REAL
+            Iniciar sesión
           </h1>
 
           <p className="mt-2 text-sm text-muted-foreground">
-            Ingresa a tu cuenta
+            Ingresa a tu cuenta de REAL
           </p>
         </div>
 
         <form action={login} className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="email">Correo electrónico</Label>
+            <Label htmlFor="email">Correo</Label>
 
             <Input
               id="email"
@@ -63,30 +68,28 @@ export default async function LoginPage({
               type="email"
               autoComplete="email"
               required
+              className="h-12"
             />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="password">Contraseña</Label>
-
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
+            <PasswordField />
           </div>
 
           {errorMessage && (
-            <p className="text-sm text-destructive">
+            <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
               {errorMessage}
             </p>
           )}
 
-          <Button type="submit" className="w-full">
+          <Button type="submit" className="h-12 w-full">
             Iniciar sesión
           </Button>
+
+          <p className="text-center text-sm text-muted-foreground">
+            ¿Olvidaste tu contraseña?
+          </p>
         </form>
       </div>
     </main>
