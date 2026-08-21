@@ -37,12 +37,14 @@ jobs:
           npx --yes vercel@latest pull
           --yes
           --environment=production
+          --scope=real-2fa3
           --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build production
         run: >
           npx --yes vercel@latest build
           --prod
+          --scope=real-2fa3
           --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy production
@@ -50,4 +52,5 @@ jobs:
           npx --yes vercel@latest deploy
           --prebuilt
           --prod
+          --scope=real-2fa3
           --token=${{ secrets.VERCEL_TOKEN }}
