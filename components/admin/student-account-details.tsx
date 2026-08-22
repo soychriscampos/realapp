@@ -4,15 +4,22 @@ import { Tabs } from "@base-ui/react/tabs"
 import { useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import { PaymentDetailsSheet } from "@/components/admin/payment-details-sheet"
 import {
   formatCurrency,
   type StudentAccountMovement,
   type StudentChargeBalance,
+  type StudentPaymentDetail,
 } from "@/lib/admin/student-account"
 
 type StudentAccountDetailsProps = {
   charges: StudentChargeBalance[]
   movements: StudentAccountMovement[]
+  payments: StudentPaymentDetail[]
+  studentId: string
+  currentReceiverId: string | null
+  isMaster: boolean
+  paymentDetailsError?: boolean
   operationalCycleId?: string
 }
 
@@ -26,6 +33,11 @@ type CycleGroup = {
 export function StudentAccountDetails({
   charges,
   movements,
+  payments: paymentDetailsData,
+  studentId,
+  currentReceiverId,
+  isMaster,
+  paymentDetailsError = false,
   operationalCycleId,
 }: StudentAccountDetailsProps) {
   const cycles = useMemo(() => groupChargesByCycle(charges), [charges])
@@ -76,7 +88,15 @@ export function StudentAccountDetails({
         )}
       </section>
 
-      <PaymentHistory movements={movements} />
+      <PaymentHistory
+        movements={movements}
+        payments={paymentDetailsData}
+        charges={charges}
+        studentId={studentId}
+        currentReceiverId={currentReceiverId}
+        isMaster={isMaster}
+        detailsError={paymentDetailsError}
+      />
     </div>
   )
 }
@@ -179,9 +199,25 @@ function PriorCycleBalance({
   )
 }
 
-function PaymentHistory({ movements }: { movements: StudentAccountMovement[] }) {
+function PaymentHistory({
+  movements,
+  payments: paymentDetailsData,
+  charges,
+  studentId,
+  currentReceiverId,
+  isMaster,
+  detailsError,
+}: {
+  movements: StudentAccountMovement[]
+  payments: StudentPaymentDetail[]
+  charges: StudentChargeBalance[]
+  studentId: string
+  currentReceiverId: string | null
+  isMaster: boolean
+  detailsError: boolean
+}) {
   const [expanded, setExpanded] = useState(false)
-  const payments = useMemo(
+  const paymentMovements = useMemo(
     () => movements
       .filter((movement) => movement.movementType === "PAYMENT")
       .sort((left, right) => right.recordedAt.localeCompare(left.recordedAt)),
@@ -193,9 +229,13 @@ function PaymentHistory({ movements }: { movements: StudentAccountMovement[] }) 
       .sort((left, right) => right.recordedAt.localeCompare(left.recordedAt)),
     [movements]
   )
-  const visiblePayments = expanded ? payments : payments.slice(0, 5)
+  const visiblePayments = expanded ? paymentMovements : paymentMovements.slice(0, 5)
+  const paymentDetails = useMemo(
+    () => new Map(paymentDetailsData.map((payment) => [payment.id, payment])),
+    [paymentDetailsData]
+  )
   const visibleSecondary = expanded ? secondaryMovements : secondaryMovements.slice(0, 2)
-  const hasMore = payments.length > visiblePayments.length || secondaryMovements.length > visibleSecondary.length
+  const hasMore = paymentMovements.length > visiblePayments.length || secondaryMovements.length > visibleSecondary.length
 
   return (
     <section className="space-y-4" aria-labelledby="payment-history">
@@ -206,7 +246,7 @@ function PaymentHistory({ movements }: { movements: StudentAccountMovement[] }) 
         </p>
       </div>
 
-      {payments.length ? (
+      {paymentMovements.length ? (
         <>
           <div className="hidden overflow-hidden rounded-xl border border-border bg-white md:block">
             <table className="w-full text-left text-sm">
@@ -215,21 +255,48 @@ function PaymentHistory({ movements }: { movements: StudentAccountMovement[] }) 
                   <th className="px-4 py-3 font-medium">Fecha</th>
                   <th className="px-4 py-3 text-right font-medium">Monto</th>
                   <th className="px-4 py-3 font-medium">Método</th>
+                  <th className="px-4 py-3 text-right font-medium">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {visiblePayments.map((payment) => <PaymentTableRow key={payment.id} movement={payment} />)}
+                {visiblePayments.map((payment) => (
+                  <PaymentTableRow
+                    key={payment.id}
+                    movement={payment}
+                    payment={paymentDetails.get(payment.id)}
+                    charges={charges}
+                    studentId={studentId}
+                    currentReceiverId={currentReceiverId}
+                    isMaster={isMaster}
+                  />
+                ))}
               </tbody>
             </table>
           </div>
 
           <div className="divide-y divide-border border-y border-border md:hidden">
-            {visiblePayments.map((payment) => <PaymentMobileRow key={payment.id} movement={payment} />)}
+            {visiblePayments.map((payment) => (
+              <PaymentMobileRow
+                key={payment.id}
+                movement={payment}
+                payment={paymentDetails.get(payment.id)}
+                charges={charges}
+                studentId={studentId}
+                currentReceiverId={currentReceiverId}
+                isMaster={isMaster}
+              />
+            ))}
           </div>
         </>
       ) : (
         <p className="border-y border-border py-5 text-sm text-muted-foreground">
           Aún no hay pagos registrados para este alumno.
+        </p>
+      )}
+
+      {detailsError && (
+        <p className="text-sm text-muted-foreground">
+          No pudimos cargar los detalles de algunos pagos. Inténtalo de nuevo en unos momentos.
         </p>
       )}
 
@@ -297,30 +364,98 @@ function MobileMetric({
   )
 }
 
-function PaymentTableRow({ movement }: { movement: StudentAccountMovement }) {
+function PaymentTableRow({
+  movement,
+  payment,
+  charges,
+  studentId,
+  currentReceiverId,
+  isMaster,
+}: {
+  movement: StudentAccountMovement
+  payment: StudentPaymentDetail | undefined
+  charges: StudentChargeBalance[]
+  studentId: string
+  currentReceiverId: string | null
+  isMaster: boolean
+}) {
+  const reversed = movement.status === "REVERSED"
+
   return (
     <tr>
       <td className="px-4 py-3">{formatDate(movement.movementOn)}</td>
-      <td className="px-4 py-3 text-right font-medium tabular-nums text-emerald-700">-{formatCurrency(movement.credit)}</td>
+      <td className={[
+        "px-4 py-3 text-right font-medium tabular-nums",
+        reversed ? "text-muted-foreground line-through" : "text-emerald-700",
+      ].join(" ")}>-{formatCurrency(movement.credit)}</td>
       <td className="px-4 py-3">
         <p>{paymentMethod(movement)}</p>
         <PaymentReceiver movement={movement} />
+        {reversed && <p className="mt-1 text-xs font-medium text-destructive">Revertido</p>}
+      </td>
+      <td className="px-4 py-3 text-right">
+        {payment && (
+          <PaymentDetailsSheet
+            studentId={studentId}
+            payment={payment}
+            charges={charges}
+            canManage={canManagePayment(payment, currentReceiverId, isMaster)}
+          />
+        )}
       </td>
     </tr>
   )
 }
 
-function PaymentMobileRow({ movement }: { movement: StudentAccountMovement }) {
+function PaymentMobileRow({
+  movement,
+  payment,
+  charges,
+  studentId,
+  currentReceiverId,
+  isMaster,
+}: {
+  movement: StudentAccountMovement
+  payment: StudentPaymentDetail | undefined
+  charges: StudentChargeBalance[]
+  studentId: string
+  currentReceiverId: string | null
+  isMaster: boolean
+}) {
+  const reversed = movement.status === "REVERSED"
+
   return (
     <article className="flex items-start justify-between gap-4 py-4 first:pt-3 last:pb-3">
       <div>
         <p className="text-sm font-medium">{formatDate(movement.movementOn)}</p>
         <p className="mt-1 text-sm text-muted-foreground">{paymentMethod(movement)}</p>
         <PaymentReceiver movement={movement} />
+        {reversed && <p className="mt-1 text-xs font-medium text-destructive">Revertido</p>}
       </div>
-      <p className="shrink-0 text-sm font-medium tabular-nums text-emerald-700">-{formatCurrency(movement.credit)}</p>
+      <div className="flex shrink-0 flex-col items-end gap-2">
+        <p className={[
+          "text-sm font-medium tabular-nums",
+          reversed ? "text-muted-foreground line-through" : "text-emerald-700",
+        ].join(" ")}>-{formatCurrency(movement.credit)}</p>
+        {payment && (
+          <PaymentDetailsSheet
+            studentId={studentId}
+            payment={payment}
+            charges={charges}
+            canManage={canManagePayment(payment, currentReceiverId, isMaster)}
+          />
+        )}
+      </div>
     </article>
   )
+}
+
+function canManagePayment(
+  payment: StudentPaymentDetail,
+  currentReceiverId: string | null,
+  isMaster: boolean
+) {
+  return isMaster || Boolean(currentReceiverId && payment.receivedByStaffId === currentReceiverId)
 }
 
 function PaymentReceiver({ movement }: { movement: StudentAccountMovement }) {

@@ -21,6 +21,30 @@ export type RegisterPaymentResult =
   | { ok: true; paymentId: string }
   | { ok: false; message: string; refreshCharges?: boolean }
 
+export type UpdatePaymentMetadataInput = {
+  studentId: string
+  paymentId: string
+  patch: Record<string, string | null>
+  reason: string
+}
+
+export type CorrectPaymentAllocationsInput = {
+  studentId: string
+  paymentId: string
+  allocations: Array<{ charge_id: string; amount: string }>
+  reason: string
+}
+
+export type ReversePaymentInput = {
+  studentId: string
+  paymentId: string
+  reason: string
+}
+
+export type PaymentManagementResult =
+  | { ok: true }
+  | { ok: false; message: string; refreshAccount?: boolean }
+
 export async function registerPayment(
   input: RegisterPaymentInput
 ): Promise<RegisterPaymentResult> {
@@ -72,6 +96,86 @@ export async function registerPayment(
   revalidatePath(`/admin/alumnos/${input.studentId}/cuenta`)
 
   return { ok: true, paymentId: data }
+}
+
+export async function updatePaymentMetadata(
+  input: UpdatePaymentMetadataInput
+): Promise<PaymentManagementResult> {
+  const patch = Object.fromEntries(
+    Object.entries(input.patch).map(([key, value]) => [key, cleanText(value)])
+  )
+
+  if (!input.paymentId || !input.studentId || !input.reason.trim() || !Object.keys(patch).length) {
+    return { ok: false, message: "Agrega un cambio y el motivo de la corrección." }
+  }
+
+  return runPaymentManagementRpc(
+    "update_payment_metadata",
+    {
+      p_payment_id: input.paymentId,
+      p_patch: patch,
+      p_reason: input.reason.trim(),
+    },
+    input.studentId,
+    "metadata"
+  )
+}
+
+export async function correctPaymentAllocations(
+  input: CorrectPaymentAllocationsInput
+): Promise<PaymentManagementResult> {
+  if (!input.paymentId || !input.studentId || !input.reason.trim() || !input.allocations.length) {
+    return { ok: false, message: "Define la distribución y explica el motivo de la corrección." }
+  }
+
+  return runPaymentManagementRpc(
+    "correct_payment_allocations",
+    {
+      p_payment_id: input.paymentId,
+      p_allocations: input.allocations,
+      p_reason: input.reason.trim(),
+    },
+    input.studentId,
+    "allocations"
+  )
+}
+
+export async function reversePayment(
+  input: ReversePaymentInput
+): Promise<PaymentManagementResult> {
+  if (!input.paymentId || !input.studentId || !input.reason.trim()) {
+    return { ok: false, message: "Indica el motivo de la reversión." }
+  }
+
+  return runPaymentManagementRpc(
+    "reverse_payment",
+    {
+      p_payment_id: input.paymentId,
+      p_reason: input.reason.trim(),
+    },
+    input.studentId,
+    "reverse"
+  )
+}
+
+async function runPaymentManagementRpc(
+  rpc: "update_payment_metadata" | "correct_payment_allocations" | "reverse_payment",
+  args: Record<string, unknown>,
+  studentId: string,
+  operation: "metadata" | "allocations" | "reverse"
+): Promise<PaymentManagementResult> {
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { error } = await supabase.rpc(rpc, args)
+
+  if (error) {
+    console.error(`${rpc} failed`, { code: error.code, message: error.message, studentId })
+    return mapPaymentManagementError(error.message, operation)
+  }
+
+  revalidatePath(`/admin/alumnos/${studentId}`)
+  revalidatePath(`/admin/alumnos/${studentId}/cuenta`)
+
+  return { ok: true }
 }
 
 function cleanText(value: string | null) {
@@ -126,4 +230,45 @@ function mapRegisterPaymentError(message: string): RegisterPaymentResult {
     ok: false,
     message: "No pudimos registrar el pago. Revisa los datos e inténtalo de nuevo.",
   }
+}
+
+function mapPaymentManagementError(
+  message: string,
+  operation: "metadata" | "allocations" | "reverse"
+): PaymentManagementResult {
+  const normalized = message.toLowerCase()
+
+  if (normalized.includes("insufficient permission") || normalized.includes("authentication")) {
+    return { ok: false, message: "No tienes autorización para gestionar este pago." }
+  }
+
+  if (normalized.includes("not found")) {
+    return { ok: false, message: "El pago ya no está disponible.", refreshAccount: true }
+  }
+
+  if (normalized.includes("confirmed") || normalized.includes("already been reversed") || normalized.includes("refund")) {
+    return {
+      ok: false,
+      message: "El estado de este pago cambió. Actualiza la cuenta antes de continuar.",
+      refreshAccount: true,
+    }
+  }
+
+  if (normalized.includes("available amount") || normalized.includes("allocated total") || normalized.includes("allocation")) {
+    return {
+      ok: false,
+      message: "Los saldos cambiaron. Revisa nuevamente la distribución.",
+      refreshAccount: true,
+    }
+  }
+
+  if (normalized.includes("reason") || normalized.includes("patch") || normalized.includes("description")) {
+    return { ok: false, message: "Revisa los campos y el motivo de la corrección." }
+  }
+
+  const fallback = operation === "reverse"
+    ? "No pudimos revertir el pago. Inténtalo de nuevo."
+    : "No pudimos guardar la corrección. Inténtalo de nuevo."
+
+  return { ok: false, message: fallback }
 }

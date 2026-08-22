@@ -5,7 +5,7 @@ import { notFound } from "next/navigation"
 import { AccountSummary } from "@/components/admin/student-account"
 import { RegisterPaymentSheet } from "@/components/admin/register-payment-sheet"
 import { StudentAccountDetails } from "@/components/admin/student-account-details"
-import { getStudentAccount } from "@/lib/admin/student-account"
+import { getStudentAccount, getStudentPaymentDetails } from "@/lib/admin/student-account"
 import { getPaymentFormContext } from "@/lib/admin/payments"
 import { getStudentCatalogs, getStudentDetail } from "@/lib/admin/students"
 import { requireRole } from "@/lib/auth/require-role"
@@ -38,6 +38,10 @@ export default async function StudentAccountPage({ params }: StudentAccountPageP
   }
 
   const { summary, charges, movements } = accountResult.data
+  const paymentIds = movements
+    .filter((movement) => movement.movementType === "PAYMENT")
+    .map((movement) => movement.id)
+  const paymentDetailsResult = await getStudentPaymentDetails(supabase, student.id, paymentIds)
   const schoolContext = student.enrollment
     ? `${student.enrollment.gradeLevel.name}${student.enrollment.group ? ` · ${student.enrollment.group.name}` : ""}`
     : "Sin matrícula en el ciclo operativo"
@@ -89,6 +93,11 @@ export default async function StudentAccountPage({ params }: StudentAccountPageP
       <StudentAccountDetails
         charges={charges}
         movements={movements}
+        payments={paymentDetailsResult.data}
+        studentId={student.id}
+        currentReceiverId={paymentContextResult.data?.currentReceiverId ?? null}
+        isMaster={roles.includes("MASTER")}
+        paymentDetailsError={paymentDetailsResult.error}
         operationalCycleId={catalogs?.operationalCycle?.id}
       />
     </div>

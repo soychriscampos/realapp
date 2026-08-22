@@ -44,6 +44,20 @@ export type StudentAccount = {
   movements: StudentAccountMovement[]
 }
 
+export type StudentPaymentDetail = {
+  id: string
+  amount: string
+  receivedAt: string
+  methodName: string
+  receivedByName: string
+  receivedByStaffId: string | null
+  bankReference: string | null
+  notes: string | null
+  receiptVisibleNote: string | null
+  status: string
+  allocations: Array<{ chargeId: string; amount: string }>
+}
+
 type AccountRpcResult<T> = {
   data: T[] | null
   error: unknown
@@ -85,6 +99,25 @@ type AccountMovementRow = {
   debit: unknown
   credit: unknown
   status: unknown
+}
+
+type PaymentDetailRow = {
+  id: unknown
+  amount: unknown
+  received_at: unknown
+  method_name_snapshot: unknown
+  received_by_name_snapshot: unknown
+  received_by_staff_id: unknown
+  bank_reference: unknown
+  notes: unknown
+  receipt_visible_note: unknown
+  status: unknown
+}
+
+type PaymentAllocationRow = {
+  payment_id: unknown
+  charge_id: unknown
+  amount: unknown
 }
 
 export async function getStudentAccountSummary(
@@ -145,6 +178,67 @@ export async function getStudentAccount(
       charges: (charges ?? []).map(mapCharge),
       movements: (movements ?? []).map(mapMovement),
     },
+    error: false,
+  }
+}
+
+export async function getStudentPaymentDetails(
+  supabase: SupabaseClient,
+  studentId: string,
+  paymentIds: string[]
+): Promise<{ data: StudentPaymentDetail[]; error: boolean }> {
+  if (!paymentIds.length) return { data: [], error: false }
+
+  const [paymentsResult, allocationsResult] = await Promise.all([
+    supabase
+      .from("payments")
+      .select(
+        "id, amount, received_at, method_name_snapshot, received_by_name_snapshot, received_by_staff_id, bank_reference, notes, receipt_visible_note, status"
+      )
+      .eq("student_id", studentId)
+      .in("id", paymentIds),
+    supabase
+      .from("payment_allocations")
+      .select("payment_id, charge_id, amount")
+      .in("payment_id", paymentIds)
+      .is("reversed_at", null),
+  ])
+
+  if (paymentsResult.error || allocationsResult.error) {
+    return { data: [], error: true }
+  }
+
+  const allocationsByPayment = new Map<string, StudentPaymentDetail["allocations"]>()
+  for (const row of (allocationsResult.data as PaymentAllocationRow[] | null) ?? []) {
+    const paymentId = text(row.payment_id)
+    if (!paymentId) continue
+
+    const allocations = allocationsByPayment.get(paymentId) ?? []
+    allocations.push({
+      chargeId: text(row.charge_id),
+      amount: amountText(row.amount),
+    })
+    allocationsByPayment.set(paymentId, allocations)
+  }
+
+  return {
+    data: ((paymentsResult.data as PaymentDetailRow[] | null) ?? []).map((row) => {
+      const id = text(row.id)
+
+      return {
+        id,
+        amount: amountText(row.amount),
+        receivedAt: text(row.received_at),
+        methodName: text(row.method_name_snapshot),
+        receivedByName: text(row.received_by_name_snapshot),
+        receivedByStaffId: nullableText(row.received_by_staff_id),
+        bankReference: nullableText(row.bank_reference),
+        notes: nullableText(row.notes),
+        receiptVisibleNote: nullableText(row.receipt_visible_note),
+        status: text(row.status),
+        allocations: allocationsByPayment.get(id) ?? [],
+      }
+    }),
     error: false,
   }
 }
