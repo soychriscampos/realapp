@@ -1,14 +1,19 @@
-import { ChevronRight, Search } from "lucide-react"
+import { ChevronRight } from "lucide-react"
 
-import { Input } from "@/components/ui/input"
 import { QuickAction } from "@/components/admin/admin-shell"
+import { StudentQuickSearch } from "@/components/admin/student-quick-search"
 import {
   attentionItems,
   homeSummary,
   recentPayments,
 } from "@/components/admin/admin-home-mocks"
+import { getStudentCatalogs } from "@/lib/admin/students"
+import { createClient } from "@/lib/supabase/server"
 
-export default function AdminPage() {
+export default async function AdminPage() {
+  const supabase = await createClient()
+  const { catalogs } = await getStudentCatalogs(supabase)
+
   return (
     <div className="space-y-7">
       <header className="space-y-1">
@@ -27,14 +32,7 @@ export default function AdminPage() {
         <h2 id="student-search" className="text-base font-semibold">
           Buscar alumno
         </h2>
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Nombre del alumno..."
-            aria-label="Nombre del alumno"
-            className="h-12 bg-white pl-11 text-base"
-          />
-        </div>
+        <StudentQuickSearch cycleId={catalogs?.operationalCycle?.id} />
       </section>
 
       <section aria-labelledby="quick-actions" className="space-y-3">

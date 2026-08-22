@@ -23,6 +23,7 @@ import { usePathname } from "next/navigation"
 import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
+import { StudentQuickSearch } from "@/components/admin/student-quick-search"
 import { cn } from "@/lib/utils"
 
 type AdminShellProps = {
@@ -54,24 +55,24 @@ export function AdminShell({ children, roleLabel }: AdminShellProps) {
   return (
     <div className="min-h-dvh bg-[#f7f7f8] text-foreground">
       <div className="hidden min-h-dvh lg:flex">
-        <aside className="flex w-[232px] shrink-0 flex-col border-r border-border bg-white">
-          <div className="border-b border-border px-5 py-5">
-            <Link href="/admin" className="flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-lg border border-border bg-white text-sm font-semibold">
+        <aside className="flex w-[232px] shrink-0 flex-col bg-white">
+          <div className="flex h-14 shrink-0 items-center border-b border-border px-4">
+            <Link href="/admin" className="flex min-w-0 items-center gap-2.5">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-white text-xs font-semibold">
                 REAL
               </span>
-              <span>
+              <span className="min-w-0">
                 <span className="block text-sm font-semibold">
                   Colegio REAL
                 </span>
-                <span className="block text-xs text-muted-foreground">
+                <span className="block truncate text-[11px] text-muted-foreground">
                   Ciclo 2026-2027
                 </span>
               </span>
             </Link>
           </div>
 
-          <nav className="flex-1 space-y-5 px-3 py-4">
+          <nav className="flex-1 space-y-5 border-r border-border px-3 py-4">
             <NavigationGroup items={primaryNavigation.slice(0, 1)} />
             <NavigationGroup
               label="Gestión"
@@ -87,7 +88,7 @@ export function AdminShell({ children, roleLabel }: AdminShellProps) {
             />
           </nav>
 
-          <div className="border-t border-border p-3">
+          <div className="border-t border-r border-border p-3">
             <UserMenu roleLabel={roleLabel} align="top" />
           </div>
         </aside>
@@ -95,15 +96,10 @@ export function AdminShell({ children, roleLabel }: AdminShellProps) {
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-14 items-center justify-end border-b border-border bg-white px-6">
             <div className="flex w-full max-w-[1480px] items-center justify-between gap-4">
-              <div className="relative w-full max-w-sm">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  aria-label="Buscar alumno"
-                  placeholder="Buscar alumno..."
-                  className="h-9 w-full rounded-lg border border-input bg-white pl-9 pr-3 text-sm outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/50"
-                />
+              <div className="w-full max-w-sm">
+                <StudentQuickSearch compact />
               </div>
-              <UserMenu roleLabel={roleLabel} />
+              <UserMenu roleLabel={roleLabel} compact />
             </div>
           </header>
 
@@ -194,23 +190,33 @@ function NavigationItem({
 function UserMenu({
   roleLabel,
   align = "bottom",
+  compact = false,
 }: {
   roleLabel: string
   align?: "top" | "bottom"
+  compact?: boolean
 }) {
   return (
     <Menu.Root>
       <Menu.Trigger
-        className="flex min-h-11 items-center gap-2 rounded-lg px-2 text-left text-sm outline-none transition hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+        className={cn(
+          "flex shrink-0 items-center rounded-lg text-left text-sm outline-none transition hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
+          compact ? "min-h-9 gap-2 px-1" : "min-h-11 gap-2 px-2"
+        )}
         aria-label="Abrir menú de usuario"
       >
         <span className="flex size-8 items-center justify-center rounded-full bg-muted text-xs font-semibold">
           R
         </span>
-        <span className="hidden min-w-0 sm:block">
-          <span className="block truncate font-medium">Usuario REAL</span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {roleLabel}
+        <span
+          className={cn(
+            "hidden min-w-0 sm:flex",
+            compact ? "items-center gap-1 whitespace-nowrap" : "flex-col"
+          )}
+        >
+          <span className="truncate font-medium">Usuario REAL</span>
+          <span className="truncate text-xs text-muted-foreground">
+            {compact ? `· ${roleLabel}` : roleLabel}
           </span>
         </span>
       </Menu.Trigger>
