@@ -29,8 +29,8 @@ insert into public.school_cycles (
     status
 )
 values (
-    '2026-27',
-    'Ciclo Escolar 2026-27',
+    '26-27',
+    'Ciclo Escolar 26-27',
     date '2026-08-31',
     date '2027-07-31',
     'PREPARATION'
@@ -67,7 +67,7 @@ from public.school_cycles sc
 cross join public.grade_levels gl
 join public.education_levels el
     on el.id = gl.education_level_id
-where sc.code = '2026-27'
+where sc.code = '26-27'
 on conflict (cycle_id, grade_level_id, code)
 do update set
     name = excluded.name,
@@ -108,7 +108,7 @@ cross join (
         ('P2', 'Periodo 2', 2),
         ('P3', 'Periodo 3', 3)
 ) as v(code, name, sort_order)
-where sc.code = '2026-27'
+where sc.code = '26-27'
 on conflict (cycle_id, code)
 do update set
     name = excluded.name,

@@ -35,12 +35,12 @@ insert into public.financial_plans (
 select
     sc.id,
     el.id,
-    'Plan regular 2026-27',
+    'Plan regular 26-27',
     true,
     'DRAFT'
 from public.school_cycles sc
 cross join public.education_levels el
-where sc.code = '2026-27'
+where sc.code = '26-27'
   and el.code in (
       'PREESCOLAR',
       'PRIMARIA'
@@ -124,8 +124,8 @@ cross join (
     due_date,
     sort_order
 )
-where sc.code = '2026-27'
-  and fp.name = 'Plan regular 2026-27'
+where sc.code = '26-27'
+  and fp.name = 'Plan regular 26-27'
 on conflict (
     financial_plan_id,
     financial_concept_id,
@@ -167,8 +167,8 @@ where july_period.financial_plan_id = december_period.financial_plan_id
   and december_period.coverage_year = 2026
   and december_period.coverage_month = 12
 
-  and sc.code = '2026-27'
-  and fp.name = 'Plan regular 2026-27'
+  and sc.code = '26-27'
+  and fp.name = 'Plan regular 26-27'
   and fc.code = 'TUITION';
 
 
@@ -196,6 +196,6 @@ where august_period.financial_plan_id = march_period.financial_plan_id
   and march_period.coverage_year = 2027
   and march_period.coverage_month = 3
 
-  and sc.code = '2026-27'
-  and fp.name = 'Plan regular 2026-27'
+  and sc.code = '26-27'
+  and fp.name = 'Plan regular 26-27'
   and fc.code = 'TUITION';

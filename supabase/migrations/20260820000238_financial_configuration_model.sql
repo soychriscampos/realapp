@@ -158,13 +158,13 @@ insert into public.financial_plans (
 select
     sc.id,
     el.id,
-    'Plan 10 pagos 2026-27',
+    'Plan 10 pagos 26-27',
     false,
     'DRAFT',
     10
 from public.school_cycles sc
 cross join public.education_levels el
-where sc.code = '2026-27'
+where sc.code = '26-27'
   and el.code in (
       'PREESCOLAR',
       'PRIMARIA'
@@ -200,8 +200,8 @@ with target_plans as (
     from public.financial_plans fp
     join public.school_cycles sc
       on sc.id = fp.cycle_id
-    where sc.code = '2026-27'
-      and fp.name = 'Plan 10 pagos 2026-27'
+    where sc.code = '26-27'
+      and fp.name = 'Plan 10 pagos 26-27'
 ),
 source_periods as (
     select

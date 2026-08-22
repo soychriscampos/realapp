@@ -40,7 +40,7 @@ select
 from public.school_cycles sc
 cross join public.grade_levels gl
 cross join public.subjects s
-where sc.code = '2026-27'
+where sc.code = '26-27'
   and s.code in (
       'LENGUAJES',
       'SABERES_PENSAMIENTO_CIENTIFICO',
