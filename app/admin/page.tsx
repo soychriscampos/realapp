@@ -32,7 +32,10 @@ export default async function AdminPage() {
         <h2 id="student-search" className="text-base font-semibold">
           Buscar alumno
         </h2>
-        <StudentQuickSearch cycleId={catalogs?.operationalCycle?.id} />
+        <StudentQuickSearch
+          cycleId={catalogs?.operationalCycle?.id}
+          focusTarget="register-payment"
+        />
       </section>
 
       <section aria-labelledby="quick-actions" className="space-y-3">
@@ -40,7 +43,11 @@ export default async function AdminPage() {
           Acciones rápidas
         </h2>
         <div className="grid gap-2 sm:grid-cols-3 lg:max-w-3xl">
-          <QuickAction icon="payment" label="Registrar pago" />
+          <QuickAction
+            icon="payment"
+            label="Registrar pago"
+            searchTarget="register-payment"
+          />
           <QuickAction icon="enrollment" label="Nueva preinscripción" />
           <QuickAction icon="student" label="Buscar alumno" />
         </div>

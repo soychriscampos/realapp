@@ -103,6 +103,22 @@ export async function getStudentAccountSummary(
   }
 }
 
+export async function getStudentChargeBalances(
+  supabase: SupabaseClient,
+  studentId: string
+): Promise<{ data: StudentChargeBalance[]; error: boolean }> {
+  const result = (await supabase.rpc("student_charge_balances", {
+    p_student_id: studentId,
+  })) as AccountRpcResult<ChargeBalanceRow>
+
+  if (result.error) return { data: [], error: true }
+
+  return {
+    data: (result.data ?? []).map(mapCharge),
+    error: false,
+  }
+}
+
 export async function getStudentAccount(
   supabase: SupabaseClient,
   studentId: string

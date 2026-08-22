@@ -11,9 +11,11 @@ import { createClient } from "@/lib/supabase/client"
 export function StudentQuickSearch({
   cycleId,
   compact = false,
+  focusTarget,
 }: {
   cycleId?: string
   compact?: boolean
+  focusTarget?: string
 }) {
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<StudentSearchResult[]>([])
@@ -50,6 +52,7 @@ export function StudentQuickSearch({
     <div className="relative">
       <Search className={`pointer-events-none absolute left-3 ${compact ? "top-1/2 size-4" : "top-6 size-5"} -translate-y-1/2 text-muted-foreground`} />
       <Input
+        data-search-target={focusTarget}
         value={query}
         onChange={(event) => {
           setQuery(event.target.value)

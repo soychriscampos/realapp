@@ -23,6 +23,7 @@ import { usePathname } from "next/navigation"
 import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
+import { ToasterProvider } from "@/components/ui/toaster"
 import { StudentQuickSearch } from "@/components/admin/student-quick-search"
 import { cn } from "@/lib/utils"
 
@@ -53,8 +54,9 @@ const moreNavigation = primaryNavigation.filter(
 
 export function AdminShell({ children, roleLabel }: AdminShellProps) {
   return (
-    <div className="min-h-dvh bg-[#f7f7f8] text-foreground">
-      <div className="hidden min-h-dvh lg:flex">
+    <ToasterProvider>
+      <div className="min-h-dvh bg-[#f7f7f8] text-foreground">
+        <div className="hidden min-h-dvh lg:flex">
         <aside className="flex w-[232px] shrink-0 flex-col bg-white">
           <div className="flex h-14 shrink-0 items-center border-b border-border px-4">
             <Link href="/admin" className="flex min-w-0 items-center gap-2.5">
@@ -107,9 +109,9 @@ export function AdminShell({ children, roleLabel }: AdminShellProps) {
             <div className="mx-auto w-full max-w-[1480px]">{children}</div>
           </main>
         </div>
-      </div>
+        </div>
 
-      <div className="flex min-h-dvh flex-col lg:hidden">
+        <div className="flex min-h-dvh flex-col lg:hidden">
         <header className="sticky top-0 z-30 border-b border-border bg-white/95 px-4 backdrop-blur">
           <div className="flex min-h-14 items-center justify-between gap-3 pt-[env(safe-area-inset-top)]">
             <div>
@@ -127,8 +129,9 @@ export function AdminShell({ children, roleLabel }: AdminShellProps) {
         </main>
 
         <MobileBottomNavigation />
+        </div>
       </div>
-    </div>
+    </ToasterProvider>
   )
 }
 
@@ -325,9 +328,11 @@ function MoreSheet() {
 export function QuickAction({
   icon,
   label,
+  searchTarget,
 }: {
   icon: "payment" | "student" | "enrollment"
   label: string
+  searchTarget?: string
 }) {
   const Icon =
     icon === "payment" ? Banknote : icon === "student" ? Search : PlusCircle
@@ -337,6 +342,18 @@ export function QuickAction({
       type="button"
       variant="outline"
       className="h-12 justify-start gap-3 bg-white px-3 text-sm"
+      onClick={() => {
+        if (!searchTarget) return
+        const target = Array.from(
+          document.querySelectorAll<HTMLInputElement>("[data-search-target]")
+        ).find(
+          (input) =>
+            input.dataset.searchTarget === searchTarget &&
+            input.getBoundingClientRect().width > 0
+        )
+        target?.scrollIntoView({ behavior: "smooth", block: "center" })
+        target?.focus()
+      }}
     >
       <Icon className="size-4" />
       {label}

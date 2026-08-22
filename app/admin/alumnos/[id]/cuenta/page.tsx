@@ -3,10 +3,12 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { AccountSummary } from "@/components/admin/student-account"
+import { RegisterPaymentSheet } from "@/components/admin/register-payment-sheet"
 import { StudentAccountDetails } from "@/components/admin/student-account-details"
 import { getStudentAccount } from "@/lib/admin/student-account"
+import { getPaymentFormContext } from "@/lib/admin/payments"
 import { getStudentCatalogs, getStudentDetail } from "@/lib/admin/students"
-import { createClient } from "@/lib/supabase/server"
+import { requireRole } from "@/lib/auth/require-role"
 
 type StudentAccountPageProps = {
   params: Promise<{ id: string }>
@@ -14,14 +16,19 @@ type StudentAccountPageProps = {
 
 export default async function StudentAccountPage({ params }: StudentAccountPageProps) {
   const { id } = await params
-  const supabase = await createClient()
+  const { roles, supabase, userId } = await requireRole(["MASTER", "ADMINISTRATIVO"])
   const { catalogs, error: catalogsError } = await getStudentCatalogs(supabase)
 
   if (catalogsError) return <StudentAccountLoadError studentId={id} />
 
-  const [{ data: student, error: studentError }, accountResult] = await Promise.all([
+  const [
+    { data: student, error: studentError },
+    accountResult,
+    paymentContextResult,
+  ] = await Promise.all([
     getStudentDetail(supabase, id, catalogs?.operationalCycle?.id),
     getStudentAccount(supabase, id),
+    getPaymentFormContext(supabase, userId),
   ])
 
   if (studentError) return <StudentAccountLoadError studentId={id} />
@@ -46,12 +53,29 @@ export default async function StudentAccountPage({ params }: StudentAccountPageP
           {student.fullName}
         </Link>
 
-        <div>
-          <h1 className="text-[24px] font-semibold tracking-tight sm:text-[28px]">
-            Estado de cuenta
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">{student.fullName}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{schoolContext}</p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-[24px] font-semibold tracking-tight sm:text-[28px]">
+              Estado de cuenta
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">{student.fullName}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{schoolContext}</p>
+          </div>
+          <RegisterPaymentSheet
+            student={{ id: student.id, fullName: student.fullName, context: schoolContext }}
+            charges={charges}
+            methods={paymentContextResult.data?.methods ?? []}
+            receivers={paymentContextResult.data?.receivers ?? []}
+            currentReceiverId={paymentContextResult.data?.currentReceiverId ?? null}
+            canReceiveForOthers={roles.includes("MASTER")}
+            disabledReason={paymentUnavailableReason(
+              paymentContextResult.error,
+              paymentContextResult.data?.currentReceiverId,
+              paymentContextResult.data?.receivers.length ?? 0,
+              roles.includes("MASTER")
+            )}
+            triggerClassName="w-full sm:w-auto"
+          />
         </div>
       </header>
 
@@ -69,6 +93,20 @@ export default async function StudentAccountPage({ params }: StudentAccountPageP
       />
     </div>
   )
+}
+
+function paymentUnavailableReason(
+  contextError: boolean,
+  currentReceiverId: string | null | undefined,
+  receiverCount: number,
+  canReceiveForOthers: boolean
+) {
+  if (contextError) return "No pudimos preparar el registro de pago."
+  if (!receiverCount) return "No hay receptores activos disponibles."
+  if (!canReceiveForOthers && !currentReceiverId) {
+    return "Tu usuario no tiene un registro de staff activo para recibir pagos."
+  }
+  return undefined
 }
 
 function StudentAccountLoadError({
