@@ -2,7 +2,9 @@ import Link from "next/link"
 
 import { EnrollmentFilters } from "@/components/admin/enrollment-filters"
 import { EnrollmentList } from "@/components/admin/enrollment-list"
+import { BulkEnrollmentActivationSheet } from "@/components/admin/bulk-enrollment-activation-sheet"
 import { NewEnrollmentSheet } from "@/components/admin/new-enrollment-sheet"
+import { getBulkEnrollmentCandidates } from "@/lib/admin/bulk-enrollment"
 import { getTuitionDiscountCategories } from "@/lib/admin/discount-categories"
 import { getEnrollmentFinancialCoverage, getEnrollments, getTenPaymentPlans } from "@/lib/admin/enrollments"
 import { getStudentCatalogs } from "@/lib/admin/students"
@@ -57,6 +59,15 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
   }
 
   const selectedCycle = catalogs.cycles.find((cycle) => cycle.id === values.cycle)
+  const operationalCycle = catalogs.operationalCycle
+  const previousCycle = operationalCycle
+    ? catalogs.cycles
+        .filter((cycle) => cycle.starts_on < operationalCycle.starts_on)
+        .sort((left, right) => right.starts_on.localeCompare(left.starts_on))[0]
+    : undefined
+  const bulkCandidatesResult = operationalCycle && values.cycle === operationalCycle.id && previousCycle
+    ? await getBulkEnrollmentCandidates(supabase, previousCycle.id, operationalCycle.id)
+    : { data: [], error: false }
 
   return (
     <div className="space-y-6">
@@ -65,15 +76,30 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
           <h1 className="text-[22px] font-semibold tracking-tight sm:text-2xl">Matrícula</h1>
           <p className="mt-1 text-sm text-muted-foreground">{selectedCycle?.name ?? "Ciclo escolar"}</p>
         </div>
-        <NewEnrollmentSheet
-          cycles={catalogs.cycles}
-          operationalCycleId={catalogs.operationalCycle?.id}
-          levels={catalogs.levels}
-          grades={catalogs.grades}
-          groups={groupsResult.data ?? []}
-          classifications={catalogs.classifications}
-          financialCoverage={financialCoverageResult.data}
-        />
+        <div className="flex flex-wrap gap-2">
+          {operationalCycle && values.cycle === operationalCycle.id && previousCycle && (
+            <BulkEnrollmentActivationSheet
+              cycle={operationalCycle}
+              previousCycleName={previousCycle.name}
+              candidates={bulkCandidatesResult.data}
+              loadError={bulkCandidatesResult.error}
+              levels={catalogs.levels}
+              grades={catalogs.grades}
+              groups={groupsResult.data ?? []}
+              classifications={catalogs.classifications}
+              financialCoverage={financialCoverageResult.data}
+            />
+          )}
+          <NewEnrollmentSheet
+            cycles={catalogs.cycles}
+            operationalCycleId={catalogs.operationalCycle?.id}
+            levels={catalogs.levels}
+            grades={catalogs.grades}
+            groups={groupsResult.data ?? []}
+            classifications={catalogs.classifications}
+            financialCoverage={financialCoverageResult.data}
+          />
+        </div>
       </header>
 
       <form action="/admin/matricula" className="flex items-end gap-3">

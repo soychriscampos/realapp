@@ -30,6 +30,26 @@ export type EnrollmentMutationResult =
   | { ok: true }
   | { ok: false; message: string }
 
+type BulkEnrollmentItem = {
+  studentId: string
+  cycleId: string
+  gradeLevelId: string
+  classificationId: string
+  groupId: string
+  activatedOn: string
+  classesStartOn: string | null
+  economicStartOn: string
+  initialPeriodAmount: string | null
+  enrollmentFeeMode: "FULL" | null
+  reason: string
+}
+
+export type BulkEnrollmentResult = {
+  studentId: string
+  success: boolean
+  message: string | null
+}
+
 export async function createEnrollment(
   input: CreateEnrollmentInput
 ): Promise<CreateEnrollmentResult> {
@@ -231,6 +251,101 @@ export async function getEnrollmentFeeCoverage(input: {
   }
 
   return { ok: true, covered: data }
+}
+
+export async function getBulkEnrollmentFeeCoverage(input: {
+  studentIds: string[]
+  cycleId: string
+}): Promise<{ ok: true; coverage: Record<string, boolean> } | { ok: false; message: string }> {
+  const studentIds = [...new Set(input.studentIds.filter(Boolean))]
+  if (!studentIds.length || !input.cycleId) {
+    return { ok: false, message: "Selecciona al menos un alumno para continuar." }
+  }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const results = await Promise.all(studentIds.map(async (studentId) => {
+    const { data, error } = await supabase.rpc("enrollment_fee_is_covered", {
+      p_student_id: studentId,
+      p_cycle_id: input.cycleId,
+    })
+    return { studentId, covered: data, error }
+  }))
+
+  if (results.some((result) => result.error || typeof result.covered !== "boolean")) {
+    return { ok: false, message: "No pudimos consultar si las inscripciones están cubiertas. Inténtalo de nuevo." }
+  }
+
+  return {
+    ok: true,
+    coverage: Object.fromEntries(results.map((result) => [result.studentId, result.covered as boolean])),
+  }
+}
+
+export async function bulkCreateAndActivateEnrollments(input: {
+  items: BulkEnrollmentItem[]
+}): Promise<{ ok: true; results: BulkEnrollmentResult[] } | { ok: false; message: string }> {
+  if (!input.items.length) return { ok: false, message: "Selecciona al menos un alumno para activar." }
+
+  for (const item of input.items) {
+    if (!item.studentId || !item.cycleId || !item.gradeLevelId || !item.classificationId || !item.groupId) {
+      return { ok: false, message: "Completa grado, grupo y clasificación para todos los alumnos seleccionados." }
+    }
+    if (![item.activatedOn, item.economicStartOn].every(isDate)) {
+      return { ok: false, message: "Captura fechas válidas para la activación." }
+    }
+    if (item.classesStartOn && !isDate(item.classesStartOn)) {
+      return { ok: false, message: "Captura una fecha válida de inicio de clases." }
+    }
+    if (!item.reason.trim()) return { ok: false, message: "Indica el motivo de la activación." }
+    if (item.initialPeriodAmount && (!Number.isFinite(Number(item.initialPeriodAmount)) || Number(item.initialPeriodAmount) < 0)) {
+      return { ok: false, message: "El importe del primer periodo debe ser válido." }
+    }
+  }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { data, error } = await supabase.rpc("bulk_create_and_activate_enrollments", {
+    p_items: input.items.map((item) => ({
+      student_id: item.studentId,
+      cycle_id: item.cycleId,
+      grade_level_id: item.gradeLevelId,
+      classification_id: item.classificationId,
+      group_id: item.groupId,
+      activated_on: item.activatedOn,
+      classes_start_on: cleanText(item.classesStartOn),
+      economic_start_on: item.economicStartOn,
+      initial_period_amount: cleanText(item.initialPeriodAmount),
+      initial_period_due_date: null,
+      enrollment_fee_mode: item.enrollmentFeeMode,
+      enrollment_fee_amount: null,
+      reason: item.reason.trim(),
+    })),
+  })
+
+  if (error || !Array.isArray(data)) {
+    return { ok: false, message: mapEnrollmentError(error?.message, "activation") }
+  }
+
+  const results = data.flatMap((item): BulkEnrollmentResult[] => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return []
+    const row = item as Record<string, unknown>
+    const studentId = typeof row.student_id === "string" ? row.student_id : ""
+    const success = row.success === true
+    if (!studentId) return []
+    return [{
+      studentId,
+      success,
+      message: success ? null : mapEnrollmentError(typeof row.error === "string" ? row.error : undefined, "activation"),
+    }]
+  })
+
+  if (results.length !== input.items.length) {
+    return { ok: false, message: "No pudimos interpretar el resultado de la activación masiva. Inténtalo de nuevo." }
+  }
+
+  revalidatePath("/admin/matricula")
+  for (const item of input.items) revalidatePath(`/admin/alumnos/${item.studentId}`)
+
+  return { ok: true, results }
 }
 
 export async function reactivateEnrollmentFinancial(input: {
