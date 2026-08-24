@@ -3,6 +3,7 @@ import Link from "next/link"
 
 import { EnrollmentActions } from "@/components/admin/enrollment-actions"
 import { formatEnrollmentStatus } from "@/components/admin/student-list"
+import type { TuitionDiscountCategory } from "@/lib/admin/discount-categories"
 import { getEnrollmentGroupLabel, type EnrollmentFinancialCoverage, type EnrollmentListItem, type FinancialPlanOption } from "@/lib/admin/enrollments"
 
 export function EnrollmentList({
@@ -11,12 +12,14 @@ export function EnrollmentList({
   classifications,
   tenPaymentPlans,
   financialCoverage,
+  discountCategories,
 }: {
   enrollments: EnrollmentListItem[]
   groups: Array<{ id: string; name: string; code: string; cycle_id: string; grade_level_id: string }>
   classifications: Array<{ id: string; name: string }>
   tenPaymentPlans: FinancialPlanOption[]
   financialCoverage: EnrollmentFinancialCoverage[]
+  discountCategories: TuitionDiscountCategory[]
 }) {
   if (!enrollments.length) {
     return (
@@ -48,7 +51,7 @@ export function EnrollmentList({
               </span>
               <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
             </Link>
-            <EnrollmentActions enrollment={enrollment} groups={groups} classifications={classifications} tenPaymentPlans={tenPaymentPlans} financialCoverage={financialCoverage} />
+            <EnrollmentActions enrollment={enrollment} groups={groups} classifications={classifications} tenPaymentPlans={tenPaymentPlans} financialCoverage={financialCoverage} discountCategories={discountCategories} />
           </div>
         ))}
       </div>
@@ -92,7 +95,7 @@ export function EnrollmentList({
                     >
                       <ChevronRight className="size-4" />
                     </Link>
-                    <EnrollmentActions enrollment={enrollment} groups={groups} classifications={classifications} tenPaymentPlans={tenPaymentPlans} financialCoverage={financialCoverage} />
+                    <EnrollmentActions enrollment={enrollment} groups={groups} classifications={classifications} tenPaymentPlans={tenPaymentPlans} financialCoverage={financialCoverage} discountCategories={discountCategories} />
                   </div>
                 </td>
               </tr>

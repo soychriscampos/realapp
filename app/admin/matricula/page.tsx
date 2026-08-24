@@ -3,6 +3,7 @@ import Link from "next/link"
 import { EnrollmentFilters } from "@/components/admin/enrollment-filters"
 import { EnrollmentList } from "@/components/admin/enrollment-list"
 import { NewEnrollmentSheet } from "@/components/admin/new-enrollment-sheet"
+import { getTuitionDiscountCategories } from "@/lib/admin/discount-categories"
 import { getEnrollmentFinancialCoverage, getEnrollments, getTenPaymentPlans } from "@/lib/admin/enrollments"
 import { getStudentCatalogs } from "@/lib/admin/students"
 import { requireRole } from "@/lib/auth/require-role"
@@ -31,7 +32,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
 
   if (!values.cycle) return <EnrollmentLoadError />
 
-  const [groupsResult, enrollmentResult, financialCoverageResult, tenPaymentPlansResult] = await Promise.all([
+  const [groupsResult, enrollmentResult, financialCoverageResult, tenPaymentPlansResult, discountCategoriesResult] = await Promise.all([
     supabase
       .from("groups")
       .select("id, name, code, cycle_id, grade_level_id")
@@ -48,9 +49,10 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
     }),
     getEnrollmentFinancialCoverage(supabase),
     getTenPaymentPlans(supabase),
+    getTuitionDiscountCategories(supabase, values.cycle),
   ])
 
-  if (groupsResult.error || enrollmentResult.error || financialCoverageResult.error || tenPaymentPlansResult.error) {
+  if (groupsResult.error || enrollmentResult.error || financialCoverageResult.error || tenPaymentPlansResult.error || discountCategoriesResult.error) {
     return <EnrollmentLoadError />
   }
 
@@ -118,6 +120,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
           classifications={catalogs.classifications}
           tenPaymentPlans={tenPaymentPlansResult.data}
           financialCoverage={financialCoverageResult.data}
+          discountCategories={discountCategoriesResult.data.filter((category) => category.isActive)}
         />
       </section>
     </div>

@@ -13,6 +13,7 @@ import {
   changeEnrollmentGroup,
   getEnrollmentFeeCoverage,
   reactivateEnrollmentFinancial,
+  setEnrollmentTuitionDiscount,
   withdrawEnrollment,
 } from "@/app/admin/matricula/actions"
 import { Button } from "@/components/ui/button"
@@ -25,10 +26,11 @@ import {
   type EnrollmentListItem,
   type FinancialPlanOption,
 } from "@/lib/admin/enrollments"
+import type { TuitionDiscountCategory } from "@/lib/admin/discount-categories"
 
 type GroupOption = { id: string; name: string; code: string; cycle_id: string; grade_level_id: string }
 type ClassificationOption = { id: string; name: string }
-type ActionMode = "plan" | "group" | "classification" | "withdrawal" | "reactivation"
+type ActionMode = "plan" | "group" | "classification" | "discount" | "withdrawal" | "reactivation"
 
 type EnrollmentActionsProps = {
   enrollment: EnrollmentListItem
@@ -36,6 +38,7 @@ type EnrollmentActionsProps = {
   classifications: ClassificationOption[]
   tenPaymentPlans: FinancialPlanOption[]
   financialCoverage: EnrollmentFinancialCoverage[]
+  discountCategories: TuitionDiscountCategory[]
 }
 
 export function EnrollmentActions({
@@ -44,6 +47,7 @@ export function EnrollmentActions({
   classifications,
   tenPaymentPlans,
   financialCoverage,
+  discountCategories,
 }: EnrollmentActionsProps) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<ActionMode | null>(null)
@@ -59,6 +63,9 @@ export function EnrollmentActions({
   const [enrollmentFeeCoverage, setEnrollmentFeeCoverage] = useState<"loading" | "covered" | "uncovered" | "error" | null>(null)
   const [enrollmentFeeMode, setEnrollmentFeeMode] = useState<"FULL" | "PROPORTIONAL">("FULL")
   const [enrollmentFeeAmount, setEnrollmentFeeAmount] = useState("")
+  const [discountCategoryId, setDiscountCategoryId] = useState("")
+  const [discountEffectMode, setDiscountEffectMode] = useState<"CURRENT" | "NEXT" | "PROPORTIONAL">("CURRENT")
+  const [discountCurrentPeriodAmount, setDiscountCurrentPeriodAmount] = useState("")
   const [reason, setReason] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -95,9 +102,18 @@ export function EnrollmentActions({
       agreement.validFrom <= effectiveOn &&
       (!agreement.validUntil || agreement.validUntil >= effectiveOn)
   ) ?? null
+  const selectedDiscountCategory = discountCategories.find((category) => category.id === discountCategoryId) ?? null
+  const selectedDiscountVersion = selectedDiscountCategory
+    ? selectedDiscountCategory.versions
+        .filter((version) => version.validFrom <= effectiveOn && (!version.validUntil || version.validUntil >= effectiveOn))
+        .sort((left, right) => right.validFrom.localeCompare(left.validFrom))[0] ?? null
+    : null
+  const discountPreview = selectedDiscountVersion && enrollment.currentTuition
+    ? calculateDiscountPreview(enrollment.currentTuition.baseAmount, selectedDiscountCategory?.discountType ?? "FIXED_AMOUNT", selectedDiscountVersion.value)
+    : null
 
   const selectedTarget = useMemo(() => {
-    if (mode === "withdrawal" || mode === "reactivation") return null
+    if (mode === "withdrawal" || mode === "reactivation" || mode === "discount") return null
     if (mode === "plan") return compatiblePlans.find((plan) => plan.id === targetId) ?? null
     if (mode === "group") return compatibleGroups.find((group) => group.id === targetId) ?? null
     return availableClassifications.find((classification) => classification.id === targetId) ?? null
@@ -121,6 +137,9 @@ export function EnrollmentActions({
     setEnrollmentFeeCoverage(nextMode === "reactivation" ? "loading" : null)
     setEnrollmentFeeMode("FULL")
     setEnrollmentFeeAmount("")
+    setDiscountCategoryId("")
+    setDiscountEffectMode("CURRENT")
+    setDiscountCurrentPeriodAmount("")
     setReason("")
     setError(null)
 
@@ -187,6 +206,35 @@ export function EnrollmentActions({
       setStep("review")
       return
     }
+    if (mode === "discount") {
+      if (!enrollment.currentTuition) {
+        setError("No encontramos una colegiatura vigente para esta matrícula.")
+        return
+      }
+      if (!discountCategoryId || !selectedDiscountCategory) {
+        setError("Selecciona una categoría de descuento.")
+        return
+      }
+      if (!selectedDiscountVersion) {
+        setError("La categoría seleccionada no tiene un valor configurado para esa fecha efectiva.")
+        return
+      }
+      if (!isDate(effectiveOn) || effectiveOn < enrollment.currentTuition.validFrom || effectiveOn < enrollment.cycle.startsOn || effectiveOn > enrollment.cycle.endsOn) {
+        setError("La fecha efectiva debe estar dentro del ciclo y no puede ser anterior al acuerdo de colegiatura vigente.")
+        return
+      }
+      if (discountEffectMode === "PROPORTIONAL" && (!discountCurrentPeriodAmount || !Number.isFinite(Number(discountCurrentPeriodAmount)) || Number(discountCurrentPeriodAmount) < 0)) {
+        setError("Captura un monto final válido para el periodo actual.")
+        return
+      }
+      if (!reason.trim()) {
+        setError("Indica el motivo del descuento.")
+        return
+      }
+      setError(null)
+      setStep("review")
+      return
+    }
     if (mode !== "withdrawal" && !selectedTarget) {
       setError(`Selecciona ${mode === "plan" ? "un plan" : mode === "group" ? "un grupo" : "una clasificación"}.`)
       return
@@ -247,6 +295,32 @@ export function EnrollmentActions({
         }
 
         toastManager.add({ title: "Matrícula reactivada", description: "La matrícula ya está activa." })
+        close()
+        router.refresh()
+      })
+      return
+    }
+
+    if (mode === "discount") {
+      if (!selectedDiscountCategory) return
+      startTransition(async () => {
+        const result = await setEnrollmentTuitionDiscount({
+          enrollmentId: enrollment.id,
+          studentId: enrollment.student.id,
+          categoryId: selectedDiscountCategory.id,
+          effectiveOn,
+          effectMode: discountEffectMode,
+          currentPeriodAmount: discountEffectMode === "PROPORTIONAL" ? discountCurrentPeriodAmount : null,
+          reason,
+        })
+
+        if (!result.ok) {
+          setError(result.message)
+          setStep("form")
+          return
+        }
+
+        toastManager.add({ title: "Descuento actualizado", description: "La colegiatura se actualizó según la configuración seleccionada." })
         close()
         router.refresh()
       })
@@ -340,6 +414,7 @@ export function EnrollmentActions({
               <Menu.Item onClick={() => void openAction("classification")} disabled={!availableClassifications.length} className="flex h-9 items-center rounded-lg px-2 text-sm outline-none hover:bg-muted data-disabled:pointer-events-none data-disabled:opacity-50">
                 Cambiar clasificación
               </Menu.Item></>}
+              {enrollment.status === "ACTIVA" && <Menu.Item onClick={() => openAction("discount")} disabled={!enrollment.currentTuition || !discountCategories.length} className="flex h-9 items-center rounded-lg px-2 text-sm outline-none hover:bg-muted data-disabled:pointer-events-none data-disabled:opacity-50">Asignar descuento</Menu.Item>}
               {enrollment.status === "ACTIVA" && <><Menu.Separator className="my-1 h-px bg-border" /><Menu.Item onClick={() => openAction("withdrawal")} className="flex h-9 items-center rounded-lg px-2 text-sm text-destructive outline-none hover:bg-destructive/10">Dar de baja</Menu.Item></>}
               {enrollment.status === "BAJA" && <Menu.Item onClick={() => void openAction("reactivation")} className="flex h-9 items-center rounded-lg px-2 text-sm outline-none hover:bg-muted">Reactivar</Menu.Item>}
             </Menu.Popup>
@@ -361,11 +436,13 @@ export function EnrollmentActions({
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-            {step === "form" && mode && mode !== "reactivation" && <ActionForm mode={mode} enrollment={enrollment} targetId={targetId} setTargetId={setTargetId} effectiveOn={effectiveOn} setEffectiveOn={setEffectiveOn} reason={reason} setReason={setReason} groups={compatibleGroups} classifications={availableClassifications} plans={compatiblePlans} planAvailable={planAvailable} currentPeriodAction={currentPeriodAction} setCurrentPeriodAction={setCurrentPeriodAction} currentPeriodAmount={currentPeriodAmount} setCurrentPeriodAmount={setCurrentPeriodAmount} futureMode={futureMode} setFutureMode={setFutureMode} />}
+            {step === "form" && mode && mode !== "reactivation" && mode !== "discount" && <ActionForm mode={mode} enrollment={enrollment} targetId={targetId} setTargetId={setTargetId} effectiveOn={effectiveOn} setEffectiveOn={setEffectiveOn} reason={reason} setReason={setReason} groups={compatibleGroups} classifications={availableClassifications} plans={compatiblePlans} planAvailable={planAvailable} currentPeriodAction={currentPeriodAction} setCurrentPeriodAction={setCurrentPeriodAction} currentPeriodAmount={currentPeriodAmount} setCurrentPeriodAmount={setCurrentPeriodAmount} futureMode={futureMode} setFutureMode={setFutureMode} />}
             {step === "form" && mode === "reactivation" && <ReactivationForm enrollment={enrollment} groups={reactivationGroups} groupId={targetId} setGroupId={setTargetId} reactivatedOn={effectiveOn} setReactivatedOn={setEffectiveOn} economicStartOn={economicStartOn} setEconomicStartOn={setEconomicStartOn} isPartial={reactivationIsPartial} tuitionAgreement={reactivationTuitionAgreement} tuitionMode={initialTuitionMode} setTuitionMode={setInitialTuitionMode} tuitionAmount={initialTuitionAmount} setTuitionAmount={setInitialTuitionAmount} enrollmentFeeCoverage={enrollmentFeeCoverage} enrollmentFeeMode={enrollmentFeeMode} setEnrollmentFeeMode={setEnrollmentFeeMode} enrollmentFeeAmount={enrollmentFeeAmount} setEnrollmentFeeAmount={setEnrollmentFeeAmount} reason={reason} setReason={setReason} />}
+            {step === "form" && mode === "discount" && <DiscountForm enrollment={enrollment} categories={discountCategories} categoryId={discountCategoryId} setCategoryId={setDiscountCategoryId} effectiveOn={effectiveOn} setEffectiveOn={setEffectiveOn} effectMode={discountEffectMode} setEffectMode={setDiscountEffectMode} currentPeriodAmount={discountCurrentPeriodAmount} setCurrentPeriodAmount={setDiscountCurrentPeriodAmount} selectedCategory={selectedDiscountCategory} selectedVersion={selectedDiscountVersion} preview={discountPreview} reason={reason} setReason={setReason} />}
             {step === "review" && mode === "withdrawal" && <WithdrawalReview enrollment={enrollment} withdrawnOn={effectiveOn} currentPeriodAction={currentPeriodAction} currentPeriodAmount={currentPeriodAmount} futureMode={futureMode} reason={reason} />}
             {step === "review" && mode === "reactivation" && <ReactivationReview group={reactivationGroups.find((group) => group.id === targetId) ?? null} reactivatedOn={effectiveOn} economicStartOn={economicStartOn} isPartial={reactivationIsPartial} tuitionMode={initialTuitionMode} tuitionAmount={initialTuitionMode === "FULL" ? reactivationTuitionAgreement?.agreedAmount.toString() ?? "" : initialTuitionAmount} enrollmentFeeCoverage={enrollmentFeeCoverage} enrollmentFeeMode={enrollmentFeeMode} enrollmentFeeAmount={enrollmentFeeAmount} reason={reason} />}
-            {step === "review" && mode && mode !== "withdrawal" && mode !== "reactivation" && selectedTarget && <ActionReview mode={mode} enrollment={enrollment} target={selectedTarget} effectiveOn={effectiveOn} reason={reason} />}
+            {step === "review" && mode === "discount" && selectedDiscountCategory && <DiscountReview enrollment={enrollment} category={selectedDiscountCategory} version={selectedDiscountVersion} preview={discountPreview} effectiveOn={effectiveOn} effectMode={discountEffectMode} currentPeriodAmount={discountCurrentPeriodAmount} reason={reason} />}
+            {step === "review" && mode && mode !== "withdrawal" && mode !== "reactivation" && mode !== "discount" && selectedTarget && <ActionReview mode={mode} enrollment={enrollment} target={selectedTarget} effectiveOn={effectiveOn} reason={reason} />}
           </div>
 
           {error && <p className="border-t border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:px-6" role="alert">{error}</p>}
@@ -374,7 +451,7 @@ export function EnrollmentActions({
               <ChevronLeft /> Atrás
             </Button>
             {step === "review" ? (
-              <Button className="h-10" disabled={isPending} onClick={submit}>{isPending && <LoaderCircle className="animate-spin" />}{isPending ? "Guardando..." : mode === "withdrawal" ? "Confirmar baja" : mode === "reactivation" ? "Confirmar reactivación" : "Confirmar cambio"}</Button>
+              <Button className="h-10" disabled={isPending} onClick={submit}>{isPending && <LoaderCircle className="animate-spin" />}{isPending ? "Guardando..." : mode === "withdrawal" ? "Confirmar baja" : mode === "reactivation" ? "Confirmar reactivación" : mode === "discount" ? "Confirmar descuento" : "Confirmar cambio"}</Button>
             ) : (
               <Button className="h-10" onClick={review}>Revisar</Button>
             )}
@@ -449,6 +526,42 @@ function WithdrawalReview({ enrollment, withdrawnOn, currentPeriodAction, curren
   return <section className="space-y-5"><div><h2 className="text-lg font-semibold">Revisión de baja</h2><p className="mt-1 text-sm text-muted-foreground">Confirma el tratamiento de la matrícula y sus colegiaturas.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={enrollment.student.fullName} /><Summary label="Ciclo" value={enrollment.cycle.name} /><Summary label="Grado / grupo" value={gradeGroup} /><Summary label="Fecha de baja" value={formatDate(withdrawnOn)} /><Summary label="Periodo actual" value={currentActionLabel} />{(currentPeriodAction === "PROPORTIONAL" || currentPeriodAction === "AGREED") && <Summary label="Monto final" value={`$${currentPeriodAmount}`} />}<Summary label="Periodos futuros" value={futureModeLabel} /><Summary label="Motivo" value={reason} /></dl></section>
 }
 
+function DiscountForm({ enrollment, categories, categoryId, setCategoryId, effectiveOn, setEffectiveOn, effectMode, setEffectMode, currentPeriodAmount, setCurrentPeriodAmount, selectedCategory, selectedVersion, preview, reason, setReason }: {
+  enrollment: EnrollmentListItem
+  categories: TuitionDiscountCategory[]
+  categoryId: string
+  setCategoryId: (value: string) => void
+  effectiveOn: string
+  setEffectiveOn: (value: string) => void
+  effectMode: "CURRENT" | "NEXT" | "PROPORTIONAL"
+  setEffectMode: (value: "CURRENT" | "NEXT" | "PROPORTIONAL") => void
+  currentPeriodAmount: string
+  setCurrentPeriodAmount: (value: string) => void
+  selectedCategory: TuitionDiscountCategory | null
+  selectedVersion: TuitionDiscountCategory["currentVersion"]
+  preview: { discountAmount: number; agreedAmount: number } | null
+  reason: string
+  setReason: (value: string) => void
+}) {
+  const currentCategory = enrollment.currentDiscount?.name ?? "Sin descuento"
+
+  return <section className="space-y-5"><div><h2 className="text-lg font-semibold">Descuento de colegiatura</h2><p className="mt-1 text-sm text-muted-foreground">La aplicación financiera se confirmará al guardar.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={enrollment.student.fullName} /><Summary label="Ciclo" value={enrollment.cycle.name} /><Summary label="Nivel" value={enrollment.educationLevel.name} /><Summary label="Colegiatura base" value={enrollment.currentTuition ? formatCurrency(enrollment.currentTuition.baseAmount) : "Sin dato"} /><Summary label="Categoría actual" value={currentCategory} /><Summary label="Monto individual actual" value={enrollment.currentTuition ? formatCurrency(enrollment.currentTuition.agreedAmount) : "Sin dato"} /></dl><Field label="Categoría de descuento"><select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className={selectClass}><option value="">Selecciona una categoría</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></Field><Field label="Fecha efectiva"><Input type="date" min={enrollment.currentTuition?.validFrom ?? enrollment.cycle.startsOn} max={enrollment.cycle.endsOn} value={effectiveOn} onChange={(event) => setEffectiveOn(event.target.value)} /></Field>{selectedCategory && <div className="space-y-2 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm"><p className="font-medium">{selectedCategory.name}</p><p className="text-muted-foreground">{discountTypeLabel(selectedCategory.discountType)}{selectedVersion ? ` · ${formatDiscountValue(selectedVersion.value, selectedCategory.discountType)}` : " · Sin valor para esta fecha"}</p>{preview && <dl className="mt-3 grid gap-1 border-t border-border pt-3"><div className="flex justify-between gap-3"><dt className="text-muted-foreground">Descuento resultante</dt><dd className="font-medium">-{formatCurrency(preview.discountAmount)}</dd></div><div className="flex justify-between gap-3"><dt className="text-muted-foreground">Monto individual resultante</dt><dd className="font-medium">{formatCurrency(preview.agreedAmount)}</dd></div></dl>}</div>}<Field label="Efecto del cambio"><select value={effectMode} onChange={(event) => setEffectMode(event.target.value as "CURRENT" | "NEXT" | "PROPORTIONAL")} className={selectClass}><option value="CURRENT">Aplicar desde el periodo actual</option><option value="NEXT">Aplicar desde el siguiente periodo</option><option value="PROPORTIONAL">Definir monto final del periodo actual</option></select></Field>{effectMode === "PROPORTIONAL" && <Field label="Monto final del periodo actual"><Input inputMode="decimal" value={currentPeriodAmount} onChange={(event) => setCurrentPeriodAmount(event.target.value)} placeholder="0.00" /></Field>}<Field label="Motivo"><Textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Explica el motivo del descuento" rows={3} /></Field></section>
+}
+
+function DiscountReview({ enrollment, category, version, preview, effectiveOn, effectMode, currentPeriodAmount, reason }: {
+  enrollment: EnrollmentListItem
+  category: TuitionDiscountCategory
+  version: TuitionDiscountCategory["currentVersion"]
+  preview: { discountAmount: number; agreedAmount: number } | null
+  effectiveOn: string
+  effectMode: "CURRENT" | "NEXT" | "PROPORTIONAL"
+  currentPeriodAmount: string
+  reason: string
+}) {
+  const effectLabel = effectMode === "CURRENT" ? "Aplicar desde el periodo actual" : effectMode === "NEXT" ? "Aplicar desde el siguiente periodo" : "Monto final del periodo actual"
+  return <section className="space-y-5"><div><h2 className="text-lg font-semibold">Revisión del descuento</h2><p className="mt-1 text-sm text-muted-foreground">Confirma la categoría y el efecto financiero.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={enrollment.student.fullName} /><Summary label="Categoría" value={category.name} /><Summary label="Valor" value={version ? formatDiscountValue(version.value, category.discountType) : "Sin valor"} /><Summary label="Fecha efectiva" value={formatDate(effectiveOn)} /><Summary label="Efecto" value={effectLabel} />{effectMode === "PROPORTIONAL" && <Summary label="Monto final actual" value={formatCurrency(Number(currentPeriodAmount))} />}<Summary label="Colegiatura base" value={enrollment.currentTuition ? formatCurrency(enrollment.currentTuition.baseAmount) : "Sin dato"} /><Summary label="Descuento resultante" value={preview ? `-${formatCurrency(preview.discountAmount)}` : "Sin dato"} /><Summary label="Monto individual resultante" value={preview ? formatCurrency(preview.agreedAmount) : "Sin dato"} /><Summary label="Motivo" value={reason} /></dl></section>
+}
+
 function ReactivationForm({ enrollment, groups, groupId, setGroupId, reactivatedOn, setReactivatedOn, economicStartOn, setEconomicStartOn, isPartial, tuitionAgreement, tuitionMode, setTuitionMode, tuitionAmount, setTuitionAmount, enrollmentFeeCoverage, enrollmentFeeMode, setEnrollmentFeeMode, enrollmentFeeAmount, setEnrollmentFeeAmount, reason, setReason }: {
   enrollment: EnrollmentListItem
   groups: GroupOption[]
@@ -513,12 +626,20 @@ function Summary({ label, value }: { label: string; value: string }) {
 }
 
 function actionLabel(mode: ActionMode) {
-  return mode === "plan" ? "Cambiar plan" : mode === "group" ? "Cambiar grupo" : mode === "classification" ? "Cambiar clasificación" : mode === "withdrawal" ? "Dar de baja" : "Reactivar matrícula"
+  return mode === "plan" ? "Cambiar plan" : mode === "group" ? "Cambiar grupo" : mode === "classification" ? "Cambiar clasificación" : mode === "discount" ? "Asignar descuento" : mode === "withdrawal" ? "Dar de baja" : "Reactivar matrícula"
 }
 
 function dateInput(date: Date) { return date.toISOString().slice(0, 10) }
 function formatDate(value: string) { return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${value}T12:00:00`)) }
 function formatCurrency(value: number) { return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value) }
+function formatDiscountValue(value: number, type: "PERCENTAGE" | "FIXED_AMOUNT") { return type === "PERCENTAGE" ? `${new Intl.NumberFormat("es-MX", { maximumFractionDigits: 2 }).format(value)}%` : formatCurrency(value) }
+function discountTypeLabel(type: "PERCENTAGE" | "FIXED_AMOUNT") { return type === "PERCENTAGE" ? "Porcentaje" : "Monto fijo" }
+function calculateDiscountPreview(baseAmount: number, type: "PERCENTAGE" | "FIXED_AMOUNT", value: number) {
+  const discountAmount = type === "PERCENTAGE"
+    ? Math.min(baseAmount, Math.max(0, Math.round(baseAmount * value) / 100))
+    : Math.min(baseAmount, Math.max(0, value))
+  return { discountAmount, agreedAmount: baseAmount - discountAmount }
+}
 function isDate(value: string) { return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T12:00:00`).getTime()) }
 function isPartialCoverageMonth(value: string, months: Array<{ year: number; month: number }>) {
   if (!isDate(value)) return false

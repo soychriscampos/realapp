@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { mapEnrollmentError } from "@/lib/admin/enrollment-errors"
+import { mapTuitionDiscountAssignmentError } from "@/lib/admin/tuition-discount-assignment-errors"
 import { requireRole } from "@/lib/auth/require-role"
 
 export type CreateEnrollmentInput = {
@@ -138,6 +139,41 @@ export async function changeEnrollmentClassification(input: {
 
   if (error) return { ok: false, message: mapEnrollmentError(error.message, "classification") }
   revalidatePath("/admin/matricula")
+  return { ok: true }
+}
+
+export async function setEnrollmentTuitionDiscount(input: {
+  enrollmentId: string
+  studentId: string
+  categoryId: string
+  effectiveOn: string
+  effectMode: "CURRENT" | "NEXT" | "PROPORTIONAL"
+  currentPeriodAmount: string | null
+  reason: string
+}): Promise<EnrollmentMutationResult> {
+  if (!input.enrollmentId || !input.studentId || !input.categoryId) return { ok: false, message: "Selecciona una categoría de descuento." }
+  if (!isDate(input.effectiveOn)) return { ok: false, message: "Captura una fecha efectiva válida." }
+  if (!input.reason.trim()) return { ok: false, message: "Indica el motivo del descuento." }
+
+  const currentPeriodAmount = cleanText(input.currentPeriodAmount)
+  if (input.effectMode === "PROPORTIONAL" && (!currentPeriodAmount || !Number.isFinite(Number(currentPeriodAmount)) || Number(currentPeriodAmount) < 0)) {
+    return { ok: false, message: "Captura un monto final válido para el periodo actual." }
+  }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { error } = await supabase.rpc("set_enrollment_tuition_discount", {
+    p_enrollment_id: input.enrollmentId,
+    p_category_id: input.categoryId,
+    p_effective_on: input.effectiveOn,
+    p_effect_mode: input.effectMode,
+    p_current_period_amount: input.effectMode === "PROPORTIONAL" ? currentPeriodAmount : null,
+    p_reason: input.reason.trim(),
+  })
+
+  if (error) return { ok: false, message: mapTuitionDiscountAssignmentError(error.message) }
+  revalidatePath("/admin/matricula")
+  revalidatePath(`/admin/alumnos/${input.studentId}`)
+  revalidatePath(`/admin/alumnos/${input.studentId}/cuenta`)
   return { ok: true }
 }
 
