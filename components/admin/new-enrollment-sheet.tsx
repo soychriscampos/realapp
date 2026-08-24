@@ -5,7 +5,7 @@ import { CheckCircle2, ChevronLeft, LoaderCircle, Plus, Search, X } from "lucide
 import Link from "next/link"
 import { useEffect, useMemo, useState, useTransition } from "react"
 
-import { createEnrollment } from "@/app/admin/matricula/actions"
+import { createEnrollment, getEnrollmentFeeCoverage } from "@/app/admin/matricula/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -57,6 +57,9 @@ export function NewEnrollmentSheet({
   const [economicStartOn, setEconomicStartOn] = useState(today)
   const [initialPeriodAmount, setInitialPeriodAmount] = useState("")
   const [initialPeriodDueDate, setInitialPeriodDueDate] = useState("")
+  const [enrollmentFeeCoverage, setEnrollmentFeeCoverage] = useState<"idle" | "loading" | "covered" | "uncovered" | "error">("idle")
+  const [enrollmentFeeMode, setEnrollmentFeeMode] = useState<"FULL" | "PROPORTIONAL">("FULL")
+  const [enrollmentFeeAmount, setEnrollmentFeeAmount] = useState("")
   const [reason, setReason] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [successId, setSuccessId] = useState<string | null>(null)
@@ -111,6 +114,16 @@ export function NewEnrollmentSheet({
     }
     setError(null)
     setStep(nextStep(step))
+    if (step === "academic") void loadEnrollmentFeeCoverage()
+  }
+
+  async function loadEnrollmentFeeCoverage() {
+    if (!student || !cycleId) return
+
+    setEnrollmentFeeCoverage("loading")
+    const result = await getEnrollmentFeeCoverage({ studentId: student.id, cycleId })
+    setEnrollmentFeeCoverage(result.ok ? result.covered ? "covered" : "uncovered" : "error")
+    if (!result.ok) setError(result.message)
   }
 
   function submit() {
@@ -132,6 +145,8 @@ export function NewEnrollmentSheet({
         economicStartOn,
         initialPeriodAmount: initialPeriodAmount || null,
         initialPeriodDueDate: initialPeriodDueDate || null,
+        enrollmentFeeMode: enrollmentFeeCoverage === "uncovered" ? enrollmentFeeMode : null,
+        enrollmentFeeAmount: enrollmentFeeCoverage === "uncovered" ? enrollmentFeeAmount || null : null,
         reason,
       })
 
@@ -159,6 +174,18 @@ export function NewEnrollmentSheet({
       if (needsInitialAmount && !initialPeriodAmount.trim()) {
         return "Captura el importe acordado para el primer periodo."
       }
+      if (enrollmentFeeCoverage === "idle" || enrollmentFeeCoverage === "loading") {
+        return "Espera a que confirmemos el estado de la inscripción."
+      }
+      if (enrollmentFeeCoverage === "error") {
+        return "No pudimos consultar si la inscripción está cubierta. Inténtalo de nuevo."
+      }
+      if (enrollmentFeeCoverage === "uncovered" && enrollmentFeeMode === "PROPORTIONAL") {
+        const amount = Number(enrollmentFeeAmount)
+        if (!enrollmentFeeAmount.trim() || !Number.isFinite(amount) || amount < 0) {
+          return "Captura un importe válido para la inscripción proporcional."
+        }
+      }
       if (!reason.trim()) return "Indica el motivo de la matrícula."
     }
     return null
@@ -178,6 +205,9 @@ export function NewEnrollmentSheet({
     setEconomicStartOn(today)
     setInitialPeriodAmount("")
     setInitialPeriodDueDate("")
+    setEnrollmentFeeCoverage("idle")
+    setEnrollmentFeeMode("FULL")
+    setEnrollmentFeeAmount("")
     setReason("")
     setError(null)
     setSuccessId(null)
@@ -212,12 +242,12 @@ export function NewEnrollmentSheet({
                 {student ? (
                   <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
                     <div className="min-w-0"><p className="truncate text-sm font-medium">{student.fullName}</p><p className="mt-1 text-xs text-muted-foreground">Alumno seleccionado</p></div>
-                    <Button variant="ghost" size="sm" onClick={() => setStudent(null)}>Cambiar</Button>
+                    <Button variant="ghost" size="sm" onClick={() => { setStudent(null); setEnrollmentFeeCoverage("idle") }}>Cambiar</Button>
                   </div>
                 ) : (
                   <>
                     <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={studentQuery} onChange={(event) => { setStudentQuery(event.target.value); setStudentResults([]); setStudentSearchState("idle"); setError(null) }} placeholder="Buscar por nombre..." className="h-11 bg-white pl-10" /></div>
-                    <StudentResults results={studentResults} state={studentSearchState} onSelect={(result) => { setStudent(result); setStudentResults([]); setStudentQuery(result.fullName) }} />
+                    <StudentResults results={studentResults} state={studentSearchState} onSelect={(result) => { setStudent(result); setStudentResults([]); setStudentQuery(result.fullName); setEnrollmentFeeCoverage("idle") }} />
                   </>
                 )}
               </section>
@@ -226,7 +256,7 @@ export function NewEnrollmentSheet({
             {step === "academic" && (
               <section className="space-y-5">
                 <div><h2 className="text-lg font-semibold">Ciclo y grupo</h2><p className="mt-1 text-sm text-muted-foreground">Define el contexto académico de la matrícula.</p></div>
-                <Field label="Ciclo"><select value={cycleId} onChange={(event) => { setCycleId(event.target.value); setGroupId("") }} className={selectClass}>{cycles.map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.name}</option>)}</select></Field>
+                <Field label="Ciclo"><select value={cycleId} onChange={(event) => { setCycleId(event.target.value); setGroupId(""); setEnrollmentFeeCoverage("idle"); setEnrollmentFeeMode("FULL"); setEnrollmentFeeAmount("") }} className={selectClass}>{cycles.map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.name}</option>)}</select></Field>
                 <Field label="Nivel"><select value={educationLevelId} onChange={(event) => { setEducationLevelId(event.target.value); setGradeLevelId(""); setGroupId("") }} className={selectClass}><option value="">Selecciona un nivel</option>{levels.map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}</select></Field>
                 <Field label="Grado"><select value={gradeLevelId} onChange={(event) => { setGradeLevelId(event.target.value); setGroupId("") }} className={selectClass} disabled={!educationLevelId}><option value="">Selecciona un grado</option>{availableGrades.map((grade) => <option key={grade.id} value={grade.id}>{grade.name}</option>)}</select></Field>
                 <Field label="Grupo"><select value={groupId} onChange={(event) => setGroupId(event.target.value)} className={selectClass} disabled={!gradeLevelId}><option value="">Sin grupo asignado</option>{availableGroups.map((group) => <option key={group.id} value={group.id}>{getEnrollmentGroupLabel(group)}</option>)}</select></Field>
@@ -240,12 +270,13 @@ export function NewEnrollmentSheet({
                 <div><h2 className="text-lg font-semibold">Configuración financiera</h2><p className="mt-1 text-sm text-muted-foreground">Se aplicará el plan predeterminado de 12 pagos configurado para el ciclo y nivel.</p></div>
                 <Field label="Inicio económico"><Input type="date" value={economicStartOn} onChange={(event) => setEconomicStartOn(event.target.value)} /></Field>
                 {needsInitialAmount && <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4"><div><p className="text-sm font-medium">Primer cobro de ingreso tardío</p><p className="mt-1 text-sm text-muted-foreground">Captura el importe acordado. No calculamos este monto automáticamente.</p></div><div className="grid gap-4 sm:grid-cols-2"><Field label="Importe del primer periodo"><Input inputMode="decimal" value={initialPeriodAmount} onChange={(event) => setInitialPeriodAmount(event.target.value)} placeholder="0.00" /></Field><Field label="Fecha de vencimiento"><Input type="date" value={initialPeriodDueDate} onChange={(event) => setInitialPeriodDueDate(event.target.value)} /></Field></div></div>}
+                <div className="space-y-3 border-y border-border py-4"><div><h3 className="text-sm font-semibold">Inscripción</h3>{(enrollmentFeeCoverage === "idle" || enrollmentFeeCoverage === "loading") && <p className="mt-1 text-sm text-muted-foreground">Consultando cobertura de inscripción...</p>}{enrollmentFeeCoverage === "covered" && <p className="mt-1 text-sm text-emerald-700">Inscripción cubierta para este ciclo.</p>}{enrollmentFeeCoverage === "uncovered" && <p className="mt-1 text-sm text-muted-foreground">Debe generar inscripción.</p>}{enrollmentFeeCoverage === "error" && <div className="mt-1 flex items-center justify-between gap-3"><p className="text-sm text-destructive">No pudimos consultar la cobertura de inscripción.</p><Button type="button" variant="outline" size="sm" onClick={() => void loadEnrollmentFeeCoverage()}>Reintentar</Button></div>}</div>{enrollmentFeeCoverage === "uncovered" && <><div className="grid gap-2"><Choice label="Completa" checked={enrollmentFeeMode === "FULL"} onChange={() => setEnrollmentFeeMode("FULL")} /><Choice label="Proporcional" checked={enrollmentFeeMode === "PROPORTIONAL"} onChange={() => setEnrollmentFeeMode("PROPORTIONAL")} /></div>{enrollmentFeeMode === "PROPORTIONAL" && <Field label="Importe de inscripción"><Input inputMode="decimal" value={enrollmentFeeAmount} onChange={(event) => setEnrollmentFeeAmount(event.target.value)} placeholder="0.00" /></Field>}</>}</div>
                 <Field label="Motivo"><Textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ej. Alta al ciclo 2026-2027" rows={3} /></Field>
               </section>
             )}
 
             {step === "review" && student && (
-              <section className="space-y-5"><div><h2 className="text-lg font-semibold">Resumen de matrícula</h2><p className="mt-1 text-sm text-muted-foreground">Revisa la información antes de activar la matrícula.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={student.fullName} /><Summary label="Ciclo" value={selectedCycle?.name ?? ""} /><Summary label="Grado" value={`${selectedLevel?.name ?? ""}${selectedLevel ? " " : ""}${selectedGrade?.name ?? ""}${groupLabel ? ` ${groupLabel}` : ""}`} /><Summary label="Clasificación" value={selectedClassification?.name ?? ""} /><Summary label="Fecha efectiva" value={formatDate(activatedOn)} /><Summary label="Inicio económico" value={formatDate(economicStartOn)} /><Summary label="Plan" value="12 pagos predeterminado" />{needsInitialAmount && <Summary label="Primer cobro" value={`$${initialPeriodAmount || "0.00"} acordado`} />}</dl></section>
+              <section className="space-y-5"><div><h2 className="text-lg font-semibold">Resumen de matrícula</h2><p className="mt-1 text-sm text-muted-foreground">Revisa la información antes de activar la matrícula.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={student.fullName} /><Summary label="Ciclo" value={selectedCycle?.name ?? ""} /><Summary label="Grado" value={`${selectedLevel?.name ?? ""}${selectedLevel ? " " : ""}${selectedGrade?.name ?? ""}${groupLabel ? ` ${groupLabel}` : ""}`} /><Summary label="Clasificación" value={selectedClassification?.name ?? ""} /><Summary label="Fecha de activación" value={formatDate(activatedOn)} /><Summary label="Inicio económico" value={formatDate(economicStartOn)} /><Summary label="Plan" value="12 pagos predeterminado" /><Summary label="Colegiatura inicial" value={needsInitialAmount ? `$${initialPeriodAmount || "0.00"} acordado` : "Inicio de periodo · colegiatura vigente"} /><Summary label="Inscripción" value={enrollmentFeeCoverage === "covered" ? "Inscripción cubierta para este ciclo" : enrollmentFeeMode === "PROPORTIONAL" ? `Inscripción proporcional · $${enrollmentFeeAmount || "0.00"}` : "Inscripción completa"} /></dl></section>
             )}
 
             {step === "success" && successId && <section className="py-8 text-center"><CheckCircle2 className="mx-auto size-10 text-emerald-600" /><h2 className="mt-4 text-lg font-semibold">Matrícula activada</h2><p className="mt-2 text-sm text-muted-foreground">La matrícula, su acuerdo base y las colegiaturas quedaron registrados.</p><Link href="/admin/matricula" className="mt-6 inline-flex h-10 items-center rounded-lg border border-border bg-white px-3 text-sm font-medium hover:bg-muted">Ver matrículas</Link></section>}
@@ -269,6 +300,10 @@ function StudentResults({ results, state, onSelect }: { results: StudentSearchRe
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <Label className="grid gap-2 text-sm font-medium"><span>{label}</span>{children}</Label>
+}
+
+function Choice({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
+  return <label className="flex min-h-10 items-center gap-3 rounded-lg border border-border px-3 text-sm font-medium"><input type="radio" checked={checked} onChange={onChange} />{label}</label>
 }
 
 function Summary({ label, value }: { label: string; value: string }) {

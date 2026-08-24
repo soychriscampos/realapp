@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { mapEnrollmentError } from "@/lib/admin/enrollment-errors"
 import { requireRole } from "@/lib/auth/require-role"
 
 export type CreateEnrollmentInput = {
@@ -15,6 +16,8 @@ export type CreateEnrollmentInput = {
   economicStartOn: string
   initialPeriodAmount: string | null
   initialPeriodDueDate: string | null
+  enrollmentFeeMode: "FULL" | "PROPORTIONAL" | null
+  enrollmentFeeAmount: string | null
   reason: string
 }
 
@@ -46,6 +49,10 @@ export async function createEnrollment(
       p_economic_start_on: input.economicStartOn,
       p_initial_period_amount: cleanText(input.initialPeriodAmount),
       p_initial_period_due_date: cleanText(input.initialPeriodDueDate),
+      p_enrollment_fee_mode: input.enrollmentFeeMode,
+      p_enrollment_fee_amount: input.enrollmentFeeMode === "PROPORTIONAL"
+        ? cleanText(input.enrollmentFeeAmount)
+        : null,
       p_reason: input.reason.trim(),
     }
   )
@@ -54,7 +61,7 @@ export async function createEnrollment(
     return {
       ok: false,
       stage: "enrollment",
-      message: mapEnrollmentCreationError(error?.message),
+      message: mapEnrollmentError(error?.message, "activation"),
     }
   }
 
@@ -81,7 +88,7 @@ export async function changeEnrollmentFinancialPlan(input: {
     p_reason: input.reason.trim(),
   })
 
-  if (error) return { ok: false, message: mapEnrollmentMutationError(error.message, "plan") }
+  if (error) return { ok: false, message: mapEnrollmentError(error.message, "plan") }
   revalidatePath("/admin/matricula")
   return { ok: true }
 }
@@ -105,7 +112,7 @@ export async function changeEnrollmentGroup(input: {
     p_reason: input.reason.trim(),
   })
 
-  if (error) return { ok: false, message: mapEnrollmentMutationError(error.message, "group") }
+  if (error) return { ok: false, message: mapEnrollmentError(error.message, "group") }
   revalidatePath("/admin/matricula")
   return { ok: true }
 }
@@ -129,7 +136,7 @@ export async function changeEnrollmentClassification(input: {
     p_reason: input.reason.trim(),
   })
 
-  if (error) return { ok: false, message: mapEnrollmentMutationError(error.message, "classification") }
+  if (error) return { ok: false, message: mapEnrollmentError(error.message, "classification") }
   revalidatePath("/admin/matricula")
   return { ok: true }
 }
@@ -164,7 +171,7 @@ export async function withdrawEnrollment(input: {
     p_reason: input.reason.trim(),
   })
 
-  if (error) return { ok: false, message: mapWithdrawalError(error.message) }
+  if (error) return { ok: false, message: mapEnrollmentError(error.message, "withdrawal") }
   revalidatePath("/admin/matricula")
   return { ok: true }
 }
@@ -227,108 +234,15 @@ export async function reactivateEnrollmentFinancial(input: {
     p_reason: input.reason.trim(),
   })
 
-  if (error) return { ok: false, message: mapReactivationError(error.message) }
+  if (error) return { ok: false, message: mapEnrollmentError(error.message, "reactivation") }
   revalidatePath("/admin/matricula")
   return { ok: true }
-}
-
-function mapEnrollmentCreationError(message?: string) {
-  const normalized = message?.toLowerCase() ?? ""
-  let friendlyMessage = "No pudimos activar la matrícula. Revisa los datos e inténtalo de nuevo."
-
-  if (normalized.includes("duplicate") || normalized.includes("already has an enrollment")) {
-    friendlyMessage = "Este alumno ya tiene una matrícula en el ciclo seleccionado."
-  }
-  else if (normalized.includes("financial") || normalized.includes("tuition") || normalized.includes("plan")) {
-    friendlyMessage = "No pudimos preparar la configuración financiera de la matrícula. Revisa la configuración e inténtalo de nuevo."
-  }
-  else if (normalized.includes("permission") || normalized.includes("authentication")) {
-    friendlyMessage = "No tienes autorización para crear esta matrícula."
-  }
-
-  if (process.env.NODE_ENV !== "production" && message) {
-    return `${friendlyMessage} Detalle: ${message}`
-  }
-
-  return friendlyMessage
 }
 
 function validateMutationInput(effectiveOn: string, reason: string, action: "plan" | "group" | "classification") {
   if (!isDate(effectiveOn)) return "Captura una fecha efectiva válida."
   if (!reason.trim()) return `Indica el motivo del cambio de ${action}.`
   return null
-}
-
-function mapEnrollmentMutationError(message: string, action: "plan" | "group" | "classification") {
-  const normalized = message.toLowerCase()
-  let friendlyMessage = `No pudimos cambiar ${action === "plan" ? "el plan financiero" : action === "group" ? "el grupo" : "la clasificación"}. Revisa los datos e inténtalo de nuevo.`
-
-  if (action === "plan") {
-    if (normalized.includes("first tuition payment")) {
-      friendlyMessage = "No se puede cambiar el plan porque ya existe un primer pago de colegiatura."
-    } else if (normalized.includes("credit activity")) {
-      friendlyMessage = "No se puede cambiar el plan porque ya existe actividad de crédito."
-    } else if (normalized.includes("adjustment")) {
-      friendlyMessage = "No se puede cambiar el plan porque existen ajustes en colegiaturas."
-    } else if (normalized.includes("charge rules") || normalized.includes("proportional")) {
-      friendlyMessage = "No se puede cambiar el plan porque existen reglas especiales que deben resolverse primero."
-    } else if (normalized.includes("target plan") || normalized.includes("10 installments") || normalized.includes("different cycle") || normalized.includes("education level")) {
-      friendlyMessage = "El plan seleccionado no es compatible con esta matrícula."
-    }
-  } else if (normalized.includes("already has requested") || normalized.includes("already assigned")) {
-    friendlyMessage = `La matrícula ya tiene ${action === "group" ? "ese grupo" : "esa clasificación"}.`
-  } else if (normalized.includes("does not belong") || normalized.includes("not found")) {
-    friendlyMessage = `La opción seleccionada no es válida para esta matrícula.`
-  }
-
-  if (process.env.NODE_ENV !== "production") return `${friendlyMessage} Detalle: ${message}`
-  return friendlyMessage
-}
-
-function mapWithdrawalError(message: string) {
-  const normalized = message.toLowerCase()
-  let friendlyMessage = "No pudimos completar la baja. Revisa los datos e inténtalo de nuevo."
-
-  if (normalized.includes("future tuition has applied money") || normalized.includes("use custom")) {
-    friendlyMessage = "Hay pagos o créditos aplicados a periodos futuros. Debes corregir su distribución antes de completar la baja."
-  } else if (normalized.includes("below already applied amount")) {
-    friendlyMessage = "El monto final no puede ser menor al importe ya aplicado en el periodo actual."
-  } else if (normalized.includes("cannot precede enrolled_on") || normalized.includes("must belong to enrollment cycle")) {
-    friendlyMessage = "La fecha de baja debe estar dentro del ciclo y no puede ser anterior al ingreso."
-  } else if (normalized.includes("only an active enrollment")) {
-    friendlyMessage = "Solo una matrícula activa puede darse de baja."
-  } else if (normalized.includes("no active tuition charge")) {
-    friendlyMessage = "No hay una colegiatura activa para aplicar el tratamiento seleccionado en este periodo."
-  } else if (normalized.includes("permission") || normalized.includes("authentication")) {
-    friendlyMessage = "No tienes autorización para registrar esta baja."
-  }
-
-  if (process.env.NODE_ENV !== "production") return `${friendlyMessage} Detalle: ${message}`
-  return friendlyMessage
-}
-
-function mapReactivationError(message: string) {
-  const normalized = message.toLowerCase()
-  let friendlyMessage = "No pudimos reactivar la matrícula. Revisa los datos e inténtalo de nuevo."
-
-  if (normalized.includes("only baja")) {
-    friendlyMessage = "Solo una matrícula en baja puede reactivarse."
-  } else if (normalized.includes("reactivated_on") || normalized.includes("economic_start_on")) {
-    friendlyMessage = "Las fechas de reingreso deben estar dentro del ciclo y en el orden correcto."
-  } else if (normalized.includes("group does not belong")) {
-    friendlyMessage = "El grupo seleccionado no corresponde al ciclo y grado de esta matrícula."
-  } else if (normalized.includes("initial tuition amount")) {
-    friendlyMessage = "El monto del primer periodo solo aplica cuando el inicio económico cae dentro de un mes ya iniciado."
-  } else if (normalized.includes("enrollment fee")) {
-    friendlyMessage = "No pudimos preparar la inscripción para la reactivación. Revisa la configuración e inténtalo de nuevo."
-  } else if (normalized.includes("tuition agreement") || normalized.includes("default 12-payment plan")) {
-    friendlyMessage = "No existe una configuración financiera vigente para reactivar esta matrícula."
-  } else if (normalized.includes("permission") || normalized.includes("authentication")) {
-    friendlyMessage = "No tienes autorización para reactivar esta matrícula."
-  }
-
-  if (process.env.NODE_ENV !== "production") return `${friendlyMessage} Detalle: ${message}`
-  return friendlyMessage
 }
 
 function validate(input: CreateEnrollmentInput) {
@@ -352,6 +266,13 @@ function validate(input: CreateEnrollmentInput) {
     const amount = Number(input.initialPeriodAmount)
     if (!Number.isFinite(amount) || amount < 0) {
       return "El importe del primer cobro debe ser un monto válido."
+    }
+  }
+
+  if (input.enrollmentFeeMode === "PROPORTIONAL") {
+    const amount = Number(input.enrollmentFeeAmount)
+    if (!input.enrollmentFeeAmount?.trim() || !Number.isFinite(amount) || amount < 0) {
+      return "El importe de inscripción proporcional debe ser un monto válido."
     }
   }
 

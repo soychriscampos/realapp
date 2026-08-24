@@ -11,3 +11,5 @@
 migration/input/*.csv
 migration/output/*
 migration/reports/*
+
+scripts/seed-local-auth.mjs
