@@ -3,10 +3,18 @@ import Link from "next/link"
 import { EnrollmentFilters } from "@/components/admin/enrollment-filters"
 import { EnrollmentList } from "@/components/admin/enrollment-list"
 import { BulkEnrollmentActivationSheet } from "@/components/admin/bulk-enrollment-activation-sheet"
+import { BulkTuitionDiscountSheet } from "@/components/admin/bulk-tuition-discount-sheet"
 import { NewEnrollmentSheet } from "@/components/admin/new-enrollment-sheet"
+import { PreregistrationCampaignSheet } from "@/components/admin/preregistration-campaign-sheet"
+import { PreregistrationEnrollmentSheet } from "@/components/admin/preregistration-enrollment-sheet"
+import { PreregistrationIntakeSheet } from "@/components/admin/preregistration-intake-sheet"
 import { getBulkEnrollmentCandidates } from "@/lib/admin/bulk-enrollment"
+import { getBulkTuitionDiscountCandidates } from "@/lib/admin/bulk-tuition-discounts"
 import { getTuitionDiscountCategories } from "@/lib/admin/discount-categories"
 import { getEnrollmentFinancialCoverage, getEnrollments, getTenPaymentPlans } from "@/lib/admin/enrollments"
+import { getConvertiblePreregistrations } from "@/lib/admin/preregistrations"
+import { getPreregistrationCampaigns } from "@/lib/admin/preregistration-campaigns"
+import { getPaymentFormContext } from "@/lib/admin/payments"
 import { getStudentCatalogs } from "@/lib/admin/students"
 import { requireRole } from "@/lib/auth/require-role"
 
@@ -16,7 +24,7 @@ type EnrollmentPageProps = {
 
 export default async function EnrollmentPage({ searchParams }: EnrollmentPageProps) {
   const params = await searchParams
-  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { supabase, userId, roles } = await requireRole(["MASTER", "ADMINISTRATIVO"])
   const { catalogs, error: catalogsError } = await getStudentCatalogs(supabase)
 
   if (catalogsError || !catalogs) return <EnrollmentLoadError />
@@ -34,7 +42,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
 
   if (!values.cycle) return <EnrollmentLoadError />
 
-  const [groupsResult, enrollmentResult, financialCoverageResult, tenPaymentPlansResult, discountCategoriesResult] = await Promise.all([
+  const [groupsResult, enrollmentResult, financialCoverageResult, tenPaymentPlansResult, discountCategoriesResult, paymentContextResult] = await Promise.all([
     supabase
       .from("groups")
       .select("id, name, code, cycle_id, grade_level_id")
@@ -52,6 +60,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
     getEnrollmentFinancialCoverage(supabase),
     getTenPaymentPlans(supabase),
     getTuitionDiscountCategories(supabase, values.cycle),
+    getPaymentFormContext(supabase, userId),
   ])
 
   if (groupsResult.error || enrollmentResult.error || financialCoverageResult.error || tenPaymentPlansResult.error || discountCategoriesResult.error) {
@@ -68,6 +77,13 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
   const bulkCandidatesResult = operationalCycle && values.cycle === operationalCycle.id && previousCycle
     ? await getBulkEnrollmentCandidates(supabase, previousCycle.id, operationalCycle.id)
     : { data: [], error: false }
+  const bulkDiscountCandidatesResult = operationalCycle && values.cycle === operationalCycle.id
+    ? await getBulkTuitionDiscountCandidates(supabase, operationalCycle.id)
+    : { data: [], error: false }
+  const [preregistrationsResult, preregistrationCampaignsResult] = await Promise.all([
+    getConvertiblePreregistrations(supabase),
+    getPreregistrationCampaigns(supabase),
+  ])
 
   return (
     <div className="space-y-6">
@@ -77,19 +93,16 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
           <p className="mt-1 text-sm text-muted-foreground">{selectedCycle?.name ?? "Ciclo escolar"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {operationalCycle && values.cycle === operationalCycle.id && previousCycle && (
-            <BulkEnrollmentActivationSheet
-              cycle={operationalCycle}
-              previousCycleName={previousCycle.name}
-              candidates={bulkCandidatesResult.data}
-              loadError={bulkCandidatesResult.error}
-              levels={catalogs.levels}
-              grades={catalogs.grades}
-              groups={groupsResult.data ?? []}
-              classifications={catalogs.classifications}
-              financialCoverage={financialCoverageResult.data}
-            />
-          )}
+          <PreregistrationIntakeSheet
+            campaigns={preregistrationCampaignsResult.data}
+            cycles={catalogs.cycles}
+            levels={catalogs.levels}
+            grades={catalogs.grades}
+            groups={groupsResult.data ?? []}
+            operationalCycleId={catalogs.operationalCycle?.id}
+            paymentContext={paymentContextResult.data}
+            canReceiveForOthers={roles.includes("MASTER")}
+          />
           <NewEnrollmentSheet
             cycles={catalogs.cycles}
             operationalCycleId={catalogs.operationalCycle?.id}
@@ -125,6 +138,55 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
           <Tab href={tabHref(values, "no-continua")} active={values.tab === "no-continua"}>No continúa</Tab>
         </div>
       </nav>
+
+      {values.tab === "preinscritas" && (
+        <div className="flex flex-wrap gap-2">
+          <PreregistrationCampaignSheet
+            campaigns={preregistrationCampaignsResult.data}
+            loadError={preregistrationCampaignsResult.error}
+            cycles={catalogs.cycles}
+            levels={catalogs.levels}
+            operationalCycleId={catalogs.operationalCycle?.id}
+          />
+          <PreregistrationEnrollmentSheet
+            preregistrations={preregistrationsResult.data}
+            loadError={preregistrationsResult.error}
+            cycles={catalogs.cycles}
+            levels={catalogs.levels}
+            grades={catalogs.grades}
+            groups={groupsResult.data ?? []}
+            classifications={catalogs.classifications}
+            financialCoverage={financialCoverageResult.data}
+          />
+        </div>
+      )}
+
+      {values.tab === "pendientes" && operationalCycle && values.cycle === operationalCycle.id && previousCycle && (
+        <div className="flex flex-wrap gap-2">
+          <BulkEnrollmentActivationSheet
+            cycle={operationalCycle}
+            previousCycleName={previousCycle.name}
+            candidates={bulkCandidatesResult.data}
+            loadError={bulkCandidatesResult.error}
+            levels={catalogs.levels}
+            grades={catalogs.grades}
+            groups={groupsResult.data ?? []}
+            classifications={catalogs.classifications}
+            financialCoverage={financialCoverageResult.data}
+          />
+        </div>
+      )}
+
+      {values.tab === "actual" && operationalCycle && values.cycle === operationalCycle.id && (
+        <div className="flex flex-wrap gap-2">
+          <BulkTuitionDiscountSheet
+            cycle={operationalCycle}
+            candidates={bulkDiscountCandidatesResult.data}
+            loadError={bulkDiscountCandidatesResult.error}
+            categories={discountCategoriesResult.data.filter((category) => category.isActive)}
+          />
+        </div>
+      )}
 
       <EnrollmentFilters
         values={values}

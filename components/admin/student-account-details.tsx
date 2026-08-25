@@ -10,6 +10,7 @@ import {
   type StudentAccountMovement,
   type StudentChargeBalance,
   type StudentPaymentDetail,
+  isChargeVisibleInCycle,
 } from "@/lib/admin/student-account"
 
 type StudentAccountDetailsProps = {
@@ -40,7 +41,7 @@ export function StudentAccountDetails({
   paymentDetailsError = false,
   operationalCycleId,
 }: StudentAccountDetailsProps) {
-  const cycles = useMemo(() => groupChargesByCycle(charges), [charges])
+  const cycles = useMemo(() => groupChargesByCycle(charges.filter((charge) => isChargeVisibleInCycle(charge))), [charges])
   const defaultCycleId = cycles.find((cycle) => cycle.id === operationalCycleId)?.id ?? cycles[0]?.id
 
   return (
@@ -500,6 +501,7 @@ function groupChargesByCycle(charges: StudentChargeBalance[]) {
 }
 
 function periodLabel(charge: StudentChargeBalance, format: "short" | "long") {
+  if (charge.conceptCode === "ENROLLMENT_FEE") return format === "short" ? "INS" : "Inscripción"
   if (charge.coverageYear && charge.coverageMonth) {
     return new Intl.DateTimeFormat("es-MX", {
       month: format === "short" ? "short" : "long",

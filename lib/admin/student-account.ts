@@ -44,6 +44,16 @@ export type StudentAccount = {
   movements: StudentAccountMovement[]
 }
 
+export function isChargeVisibleInCycle(charge: StudentChargeBalance, today = new Date()) {
+  if (charge.conceptCode !== "TUITION" || charge.isPaid || !charge.coverageYear || !charge.coverageMonth) return true
+  const currentPeriod = today.getFullYear() * 12 + today.getMonth() + 1
+  return charge.coverageYear * 12 + charge.coverageMonth <= currentPeriod
+}
+
+export function isChargeEligibleForPaymentProposal(charge: StudentChargeBalance, today = new Date()) {
+  return isChargeVisibleInCycle(charge, today) && Number(charge.outstandingAmount) > 0
+}
+
 export type StudentPaymentDetail = {
   id: string
   amount: string

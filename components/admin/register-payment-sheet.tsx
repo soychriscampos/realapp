@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
   formatCurrency,
+  isChargeEligibleForPaymentProposal,
   type StudentChargeBalance,
 } from "@/lib/admin/student-account"
 import type {
@@ -47,6 +48,10 @@ type RegisterPaymentSheetProps = {
   canReceiveForOthers: boolean
   disabledReason?: string
   triggerClassName?: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  hideTrigger?: boolean
+  onPaymentRegistered?: (paymentId: string) => void
 }
 
 type Step = "form" | "review" | "success"
@@ -72,11 +77,15 @@ export function RegisterPaymentSheet({
   canReceiveForOthers,
   disabledReason,
   triggerClassName,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
+  onPaymentRegistered,
 }: RegisterPaymentSheetProps) {
   const router = useRouter()
   const toastManager = Toast.useToastManager()
   const submittingRef = useRef(false)
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const [step, setStep] = useState<Step>("form")
   const [amount, setAmount] = useState("")
   const [receivedAt, setReceivedAt] = useState(defaultLocalDateTime)
@@ -94,7 +103,7 @@ export function RegisterPaymentSheet({
   const pendingCharges = useMemo(
     () =>
       charges
-        .filter((charge) => canonicalAmountToCents(charge.outstandingAmount) > 0)
+        .filter((charge) => isChargeEligibleForPaymentProposal(charge))
         .sort(compareCharges),
     [charges]
   )
@@ -113,6 +122,7 @@ export function RegisterPaymentSheet({
   const appliedCents = allocationDetails.reduce((total, item) => total + item.cents, 0)
   const creditCents = Math.max((amountCents ?? 0) - appliedCents, 0)
   const triggerDisabledReason = disabledReason ?? (!methods.length ? "No hay métodos de pago activos disponibles." : undefined)
+  const open = controlledOpen ?? uncontrolledOpen
 
   function handleAmountChange(value: string) {
     setAmount(value)
@@ -124,7 +134,8 @@ export function RegisterPaymentSheet({
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen && isPending) return
-    setOpen(nextOpen)
+    if (controlledOpen === undefined) setUncontrolledOpen(nextOpen)
+    onOpenChange?.(nextOpen)
     if (!nextOpen) resetForm()
   }
 
@@ -241,6 +252,7 @@ export function RegisterPaymentSheet({
       }
 
       setStep("success")
+      onPaymentRegistered?.(result.paymentId)
       toastManager.add({
         title: "Pago registrado",
         description: `${student.fullName} · ${formatCents(snapshot.amountCents)}`,
@@ -251,7 +263,7 @@ export function RegisterPaymentSheet({
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-      <div className={cn("flex flex-col items-stretch gap-1.5 sm:items-end", triggerClassName)}>
+      {!hideTrigger && <div className={cn("flex flex-col items-stretch gap-1.5 sm:items-end", triggerClassName)}>
         <Dialog.Trigger
           disabled={Boolean(triggerDisabledReason)}
           aria-describedby={triggerDisabledReason ? `payment-unavailable-${student.id}` : undefined}
@@ -266,7 +278,7 @@ export function RegisterPaymentSheet({
             {triggerDisabledReason}
           </p>
         )}
-      </div>
+      </div>}
 
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/25 transition-opacity data-ending-style:opacity-0 data-starting-style:opacity-0" />

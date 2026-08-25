@@ -9,9 +9,7 @@ export function FinancialStatus({ summary, className }: FinancialStatusProps) {
   const overdue = amountNumber(summary.overdueTotal)
   const label = overdue > 0
     ? "Con saldo vencido"
-    : summary.isCurrent
-      ? "Al corriente"
-      : "Con saldo pendiente"
+    : "Al corriente"
 
   return (
     <p
@@ -41,9 +39,9 @@ export function AccountSummary({
         <FinancialStatus summary={summary} />
         <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="text-sm text-muted-foreground">Saldo total</p>
+            <p className="text-sm text-muted-foreground">Saldo</p>
             <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
-              {formatCurrency(summary.outstandingTotal)}
+              {formatCurrency(summary.overdueTotal)}
             </p>
           </div>
           {amountNumber(summary.overdueTotal) > 0 && (
@@ -65,9 +63,9 @@ export function AccountSummary({
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm text-muted-foreground">Saldo total</p>
+          <p className="text-sm text-muted-foreground">Saldo</p>
           <p className="mt-1 break-all text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">
-            {formatCurrency(summary.outstandingTotal)}
+            {formatCurrency(summary.overdueTotal)}
           </p>
         </div>
         <FinancialStatus summary={summary} />

@@ -42,7 +42,7 @@ export type FinancialPlanOption = {
 export type EnrollmentFinancialCoverage = {
   cycleId: string
   educationLevelId: string
-  months: Array<{ year: number; month: number }>
+  months: Array<{ year: number; month: number; dueDate: string }>
 }
 
 type RecordValue = Record<string, unknown>
@@ -229,7 +229,7 @@ export async function getEnrollmentFinancialCoverage(
 
   const { data: periods, error: periodsError } = await supabase
     .from("financial_plan_periods")
-    .select("financial_plan_id, coverage_year, coverage_month, financial_concepts!inner(code)")
+    .select("financial_plan_id, coverage_year, coverage_month, due_date, financial_concepts!inner(code)")
     .in("financial_plan_id", plans.map((plan) => plan.id))
     .eq("financial_concepts.code", "TUITION")
 
@@ -243,7 +243,7 @@ export async function getEnrollmentFinancialCoverage(
         period.financial_plan_id === plan.id &&
         typeof period.coverage_year === "number" &&
         typeof period.coverage_month === "number"
-          ? [{ year: period.coverage_year, month: period.coverage_month }]
+          ? [{ year: period.coverage_year, month: period.coverage_month, dueDate: typeof period.due_date === "string" ? period.due_date : "" }]
           : []
       ),
     })),

@@ -1,4 +1,4 @@
-export type EnrollmentErrorContext = "activation" | "plan" | "group" | "classification" | "withdrawal" | "reactivation"
+export type EnrollmentErrorContext = "activation" | "preregistration" | "plan" | "group" | "classification" | "withdrawal" | "reactivation"
 
 export function mapEnrollmentError(message: string | undefined, context: EnrollmentErrorContext) {
   const technicalMessage = message?.trim() ?? ""
@@ -18,6 +18,34 @@ export function mapEnrollmentError(message: string | undefined, context: Enrollm
       friendlyMessage = "No existe una colegiatura base configurada para ese nivel y fecha."
     } else if (isExclusionConstraint(normalized)) {
       friendlyMessage = "El alumno ya tiene una matrícula registrada para este ciclo."
+    }
+  }
+
+  if (context === "preregistration") {
+    if (normalized.includes("preregistration cannot be enrolled") || normalized.includes("preregistration not found")) {
+      friendlyMessage = "Esta preinscripción ya no está disponible para convertir. Actualiza la pantalla."
+    } else if (normalized.includes("student already has an enrollment for the target cycle") || normalized.includes("student already has an enrollment")) {
+      friendlyMessage = "El alumno ya tiene una matrícula registrada para el ciclo destino."
+    } else if (normalized.includes("classification_id is required")) {
+      friendlyMessage = "Selecciona una clasificación para activar la matrícula."
+    } else if (normalized.includes("enrollment fee is required")) {
+      friendlyMessage = "Debes indicar si la inscripción se cobrará completa o proporcional."
+    } else if (normalized.includes("enrollment fee is already covered")) {
+      friendlyMessage = "La inscripción ya está cubierta para este ciclo."
+    } else if (normalized.includes("enrollment_fee_amount is required")) {
+      friendlyMessage = "Captura un importe válido para la inscripción proporcional."
+    } else if (normalized.includes("no enrollment fee base rate exists")) {
+      friendlyMessage = "No existe una tarifa de inscripción configurada para esa fecha."
+    } else if (normalized.includes("no tuition base rate exists")) {
+      friendlyMessage = "No existe una colegiatura base configurada para ese grado y fecha."
+    } else if (normalized.includes("group") && (normalized.includes("not found") || normalized.includes("does not belong"))) {
+      friendlyMessage = "El grupo seleccionado no corresponde al ciclo y grado de destino."
+    } else if (normalized.includes("classification") && normalized.includes("not found")) {
+      friendlyMessage = "La clasificación seleccionada no es válida."
+    } else if (normalized.includes("effective_on must belong") || normalized.includes("activated_on must belong") || normalized.includes("economic_start_on must belong")) {
+      friendlyMessage = "Las fechas de activación deben estar dentro del ciclo destino."
+    } else if (isExclusionConstraint(normalized)) {
+      friendlyMessage = "El alumno ya tiene una matrícula registrada para el ciclo destino."
     }
   }
 
@@ -100,7 +128,7 @@ export function mapEnrollmentError(message: string | undefined, context: Enrollm
       ? "No tienes autorización para registrar esta baja."
       : context === "reactivation"
         ? "No tienes autorización para reactivar esta matrícula."
-        : context === "activation"
+        : context === "activation" || context === "preregistration"
           ? "No tienes autorización para crear esta matrícula."
           : `No tienes autorización para ${context === "plan" ? "cambiar el plan financiero" : context === "group" ? "cambiar el grupo" : "cambiar la clasificación"}.`
   }
@@ -114,6 +142,7 @@ export function mapEnrollmentError(message: string | undefined, context: Enrollm
 
 function defaultMessage(context: EnrollmentErrorContext) {
   if (context === "activation") return "No pudimos activar la matrícula. Revisa los datos e inténtalo de nuevo."
+  if (context === "preregistration") return "No pudimos convertir la preinscripción. Revisa los datos e inténtalo de nuevo."
   if (context === "plan") return "No pudimos cambiar el plan financiero. Revisa los datos e inténtalo de nuevo."
   if (context === "group") return "No pudimos cambiar el grupo. Revisa los datos e inténtalo de nuevo."
   if (context === "classification") return "No pudimos cambiar la clasificación. Revisa los datos e inténtalo de nuevo."

@@ -5,21 +5,27 @@ import { CheckCircle2, ChevronLeft, LoaderCircle, Plus, Search, X } from "lucide
 import Link from "next/link"
 import { useEffect, useMemo, useState, useTransition } from "react"
 
-import { createEnrollment, getEnrollmentFeeCoverage } from "@/app/admin/matricula/actions"
+import { createEnrollment, createNewStudentEnrollment, getEnrollmentFeeCoverage, getNewEnrollmentFinancialOptions, type CreateNewStudentEnrollmentResult } from "@/app/admin/matricula/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { getEnrollmentGroupLabel, type EnrollmentFinancialCoverage } from "@/lib/admin/enrollments"
+import type { PaymentFormContext } from "@/lib/admin/payments"
+import type { StudentChargeBalance } from "@/lib/admin/student-account"
+import { calculateTuitionDiscountPreview, formatCurrency, formatTuitionDiscountValue, tuitionDiscountTypeLabel } from "@/lib/admin/tuition-discount-preview"
+import type { TuitionDiscountCategory } from "@/lib/admin/discount-categories"
 import { searchStudents, type StudentSearchResult } from "@/lib/admin/students"
 import { createClient } from "@/lib/supabase/client"
+import { RegisterPaymentSheet } from "@/components/admin/register-payment-sheet"
 
 type Cycle = { id: string; name: string; starts_on: string }
 type Grade = { id: string; name: string; education_level_id: string }
 type Level = { id: string; name: string }
 type Group = { id: string; name: string; code: string; grade_level_id: string; cycle_id: string }
 type Classification = { id: string; name: string }
-type Step = "student" | "academic" | "financial" | "review" | "success"
+type Step = "student" | "academic" | "financial" | "review" | "payment" | "success"
+type Contact = { full_name: string; relationship: string; phone: string; email: string }
 
 type NewEnrollmentSheetProps = {
   cycles: Cycle[]
@@ -47,6 +53,11 @@ export function NewEnrollmentSheet({
   const [studentResults, setStudentResults] = useState<StudentSearchResult[]>([])
   const [studentSearchState, setStudentSearchState] = useState<"idle" | "loading" | "error" | "empty">("idle")
   const [student, setStudent] = useState<StudentSearchResult | null>(null)
+  const [newStudentMode, setNewStudentMode] = useState(false)
+  const [studentFullName, setStudentFullName] = useState("")
+  const [studentSex, setStudentSex] = useState<"H" | "M">("H")
+  const [studentBirthDate, setStudentBirthDate] = useState("")
+  const [contacts, setContacts] = useState<Contact[]>([{ full_name: "", relationship: "", phone: "", email: "" }])
   const [cycleId, setCycleId] = useState(operationalCycleId ?? cycles[0]?.id ?? "")
   const [educationLevelId, setEducationLevelId] = useState("")
   const [gradeLevelId, setGradeLevelId] = useState("")
@@ -54,15 +65,25 @@ export function NewEnrollmentSheet({
   const [classificationId, setClassificationId] = useState("")
   const [classesStartOn, setClassesStartOn] = useState("")
   const [activatedOn, setActivatedOn] = useState(today)
-  const [economicStartOn, setEconomicStartOn] = useState(today)
   const [initialPeriodAmount, setInitialPeriodAmount] = useState("")
   const [initialPeriodDueDate, setInitialPeriodDueDate] = useState("")
+  const [initialPeriodDecision, setInitialPeriodDecision] = useState<"WAIVE" | "CHARGE">("WAIVE")
+  const [baseAmount, setBaseAmount] = useState<number | null>(null)
+  const [discountCategories, setDiscountCategories] = useState<TuitionDiscountCategory[]>([])
+  const [discountCategoryId, setDiscountCategoryId] = useState("")
+  const [financialOptionsState, setFinancialOptionsState] = useState<"idle" | "loading" | "ready" | "error">("idle")
   const [enrollmentFeeCoverage, setEnrollmentFeeCoverage] = useState<"idle" | "loading" | "covered" | "uncovered" | "error">("idle")
   const [enrollmentFeeMode, setEnrollmentFeeMode] = useState<"FULL" | "PROPORTIONAL">("FULL")
   const [enrollmentFeeAmount, setEnrollmentFeeAmount] = useState("")
   const [reason, setReason] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [successId, setSuccessId] = useState<string | null>(null)
+  const [createdStudentId, setCreatedStudentId] = useState<string | null>(null)
+  const [pendingCharges, setPendingCharges] = useState<StudentChargeBalance[]>([])
+  const [paymentContext, setPaymentContext] = useState<PaymentFormContext | null>(null)
+  const [canReceiveForOthers, setCanReceiveForOthers] = useState(false)
+  const [paymentOpen, setPaymentOpen] = useState(false)
+  const [paymentCompleted, setPaymentCompleted] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const selectedCycle = cycles.find((cycle) => cycle.id === cycleId) ?? null
@@ -75,15 +96,100 @@ export function NewEnrollmentSheet({
     (group) => group.cycle_id === cycleId && group.grade_level_id === gradeLevelId
   )
   const groupLabel = selectedGroup ? getEnrollmentGroupLabel(selectedGroup) : ""
-  const needsInitialAmount = useMemo(() => {
-    if (!selectedGrade || !economicStartOn) return false
-    const [year, month, day] = economicStartOn.split("-").map(Number)
-    if (!year || !month || !day || day === 1) return false
+  const firstOrdinaryPeriodStart = useMemo(() => {
+    if (!selectedGrade) return null
     const coverage = financialCoverage.find(
       (item) => item.cycleId === cycleId && item.educationLevelId === selectedGrade.education_level_id
     )
-    return coverage?.months.some((item) => item.year === year && item.month === month) ?? false
-  }, [cycleId, economicStartOn, financialCoverage, selectedGrade])
+    if (!coverage?.months.length) return null
+
+    const firstOrdinaryPeriod = coverage.months.reduce((earliest, item) =>
+      item.year * 12 + item.month < earliest.year * 12 + earliest.month ? item : earliest
+    )
+    return `${firstOrdinaryPeriod.year}-${String(firstOrdinaryPeriod.month).padStart(2, "0")}-01`
+  }, [cycleId, financialCoverage, selectedGrade])
+
+  const showInitialPeriodDecision = Boolean(newStudentMode && firstOrdinaryPeriodStart && activatedOn && activatedOn < firstOrdinaryPeriodStart)
+  const needsInitialAmount = useMemo(() => {
+    if (!activatedOn) return false
+    if (showInitialPeriodDecision) return true
+
+    const [year, month, day] = activatedOn.split("-").map(Number)
+    if (!year || !month || !day) return false
+    const coverage = financialCoverage.find(
+      (item) => item.cycleId === cycleId && item.educationLevelId === selectedGrade?.education_level_id
+    )
+    if (!coverage?.months.length) return false
+
+    const startsDuringConfiguredPeriod = coverage.months.some((item) => item.year === year && item.month === month)
+    return startsDuringConfiguredPeriod && day > 1
+  }, [activatedOn, cycleId, financialCoverage, selectedGrade, showInitialPeriodDecision])
+
+  const initialPeriodChargeSelected = !showInitialPeriodDecision || initialPeriodDecision === "CHARGE"
+  const economicStartForRpc = showInitialPeriodDecision && initialPeriodDecision === "WAIVE"
+    ? firstOrdinaryPeriodStart ?? activatedOn
+    : showInitialPeriodDecision && initialPeriodDecision === "CHARGE"
+      ? activatedOn
+      : activatedOn
+  const selectedDiscountCategory = discountCategories.find((category) => category.id === discountCategoryId) ?? null
+  const selectedDiscountVersion = selectedDiscountCategory?.versions
+    .filter((version) => version.validFrom <= activatedOn && (!version.validUntil || version.validUntil >= activatedOn))
+    .sort((left, right) => right.validFrom.localeCompare(left.validFrom))[0] ?? null
+  const discountPreview = baseAmount !== null && selectedDiscountCategory && selectedDiscountVersion
+    ? calculateTuitionDiscountPreview(baseAmount, selectedDiscountCategory.discountType, selectedDiscountVersion.value)
+    : null
+  const individualAmount = discountPreview?.agreedAmount ?? baseAmount
+  const suggestedInitialAmount = useMemo(() => {
+    if (!needsInitialAmount || individualAmount === null || !activatedOn) return ""
+    const [year, month, day] = activatedOn.split("-").map(Number)
+    if (!year || !month || !day) return ""
+    const daysInMonth = new Date(year, month, 0).getDate()
+    const applicableDays = daysInMonth - day + 1
+    return (Math.round(individualAmount * applicableDays / daysInMonth * 100) / 100).toFixed(2)
+  }, [activatedOn, individualAmount, needsInitialAmount])
+  const ordinaryPeriod = useMemo(() => {
+    if (!activatedOn || !selectedGrade) return null
+    const [year, month] = activatedOn.split("-").map(Number)
+    const coverage = financialCoverage.find(
+      (item) => item.cycleId === cycleId && item.educationLevelId === selectedGrade.education_level_id
+    )
+    return coverage?.months.find((item) => item.year === year && item.month === month) ?? null
+  }, [activatedOn, cycleId, financialCoverage, selectedGrade])
+
+  useEffect(() => {
+    if (!newStudentMode || !educationLevelId || !cycleId || !activatedOn) return
+    let cancelled = false
+    const request = window.setTimeout(() => {
+      setFinancialOptionsState("loading")
+      void getNewEnrollmentFinancialOptions({ cycleId, educationLevelId, effectiveOn: activatedOn }).then((result) => {
+      if (cancelled) return
+      if (!result.ok) {
+        setFinancialOptionsState("error")
+        setError(result.message)
+        return
+      }
+      setBaseAmount(result.data.baseAmount)
+      setDiscountCategories(result.data.discountCategories)
+      setDiscountCategoryId((current) => result.data.discountCategories.some((category) => category.id === current) ? current : "")
+      setFinancialOptionsState("ready")
+      })
+    }, 0)
+    return () => { cancelled = true; window.clearTimeout(request) }
+  }, [activatedOn, cycleId, educationLevelId, newStudentMode])
+
+  useEffect(() => {
+    const update = window.setTimeout(() => {
+      if (suggestedInitialAmount) setInitialPeriodAmount(suggestedInitialAmount)
+      if (!needsInitialAmount || !initialPeriodChargeSelected) {
+        setInitialPeriodDueDate("")
+      } else if (!showInitialPeriodDecision) {
+        setInitialPeriodDueDate(ordinaryPeriod?.dueDate ?? "")
+      } else {
+        setInitialPeriodDueDate("")
+      }
+    }, 0)
+    return () => window.clearTimeout(update)
+  }, [activatedOn, initialPeriodChargeSelected, needsInitialAmount, ordinaryPeriod, showInitialPeriodDecision, suggestedInitialAmount])
 
   useEffect(() => {
     const value = studentQuery.trim()
@@ -118,7 +224,13 @@ export function NewEnrollmentSheet({
   }
 
   async function loadEnrollmentFeeCoverage() {
-    if (!student || !cycleId) return
+    if (!cycleId) return
+
+    if (newStudentMode) {
+      setEnrollmentFeeCoverage("uncovered")
+      return
+    }
+    if (!student) return
 
     setEnrollmentFeeCoverage("loading")
     const result = await getEnrollmentFeeCoverage({ studentId: student.id, cycleId })
@@ -128,12 +240,41 @@ export function NewEnrollmentSheet({
 
   function submit() {
     const message = stepError()
-    if (message || !student) {
-      setError(message ?? "Selecciona un alumno.")
+    if (message || (!student && !newStudentMode)) {
+      setError(message ?? "Selecciona un alumno o elige alta de alumno nuevo.")
       return
     }
 
     startTransition(async () => {
+      if (newStudentMode) {
+        const result = await createNewStudentEnrollment({
+          studentFullName,
+          studentSex,
+          studentBirthDate,
+          contacts,
+          cycleId,
+          gradeLevelId,
+          groupId: groupId || null,
+          classificationId,
+          discountCategoryId: discountCategoryId || null,
+          classesStartOn: classesStartOn || null,
+          activatedOn,
+          economicStartOn: economicStartForRpc,
+          initialPeriodAmount: needsInitialAmount && initialPeriodChargeSelected ? initialPeriodAmount || null : null,
+          initialPeriodDueDate: needsInitialAmount && initialPeriodChargeSelected ? initialPeriodDueDate || null : null,
+          enrollmentFeeMode: enrollmentFeeCoverage === "uncovered" ? enrollmentFeeMode : null,
+          enrollmentFeeAmount: enrollmentFeeCoverage === "uncovered" ? enrollmentFeeAmount || null : null,
+          reason,
+        })
+        if (!result.ok) {
+          setError(result.message)
+          return
+        }
+        handleCreatedStudent(result)
+        return
+      }
+
+      if (!student) return
       const result = await createEnrollment({
         studentId: student.id,
         cycleId,
@@ -142,9 +283,9 @@ export function NewEnrollmentSheet({
         classificationId,
         classesStartOn: classesStartOn || null,
         activatedOn,
-        economicStartOn,
-        initialPeriodAmount: initialPeriodAmount || null,
-        initialPeriodDueDate: initialPeriodDueDate || null,
+        economicStartOn: economicStartForRpc,
+        initialPeriodAmount: needsInitialAmount && initialPeriodChargeSelected ? initialPeriodAmount || null : null,
+        initialPeriodDueDate: needsInitialAmount && initialPeriodChargeSelected ? initialPeriodDueDate || null : null,
         enrollmentFeeMode: enrollmentFeeCoverage === "uncovered" ? enrollmentFeeMode : null,
         enrollmentFeeAmount: enrollmentFeeCoverage === "uncovered" ? enrollmentFeeAmount || null : null,
         reason,
@@ -161,8 +302,33 @@ export function NewEnrollmentSheet({
     })
   }
 
+  function handleCreatedStudent(result: Extract<CreateNewStudentEnrollmentResult, { ok: true }>) {
+    setCreatedStudentId(result.studentId)
+    setSuccessId(result.enrollmentId)
+    setPendingCharges(result.charges)
+    setPaymentContext(result.paymentContext)
+    setCanReceiveForOthers(result.canReceiveForOthers)
+    setPaymentCompleted(false)
+    setError(null)
+    setStep(result.charges.length ? "payment" : "success")
+  }
+
+  function updateContact(index: number, field: keyof Contact, value: string) {
+    setContacts((current) => current.map((contact, contactIndex) => contactIndex === index ? { ...contact, [field]: value } : contact))
+  }
+
   function stepError() {
-    if (step === "student" && !student) return "Busca y selecciona un alumno existente."
+    if (step === "student") {
+      if (newStudentMode) {
+        if (!studentFullName.trim()) return "Indica el nombre completo del alumno."
+        if (!studentBirthDate) return "Captura la fecha de nacimiento del alumno."
+        if (contacts.length < 1 || contacts.some((contact) => !contact.full_name.trim() || !contact.relationship.trim() || !contact.phone.trim())) {
+          return "Completa nombre, parentesco y teléfono del contacto principal."
+        }
+      } else if (!student) {
+        return "Busca y selecciona un alumno existente."
+      }
+    }
     if (step === "academic") {
       if (!cycleId || !educationLevelId || !gradeLevelId || !classificationId) {
         return "Selecciona ciclo, nivel, grado y clasificación."
@@ -170,9 +336,11 @@ export function NewEnrollmentSheet({
       if (!activatedOn) return "Captura la fecha efectiva de ingreso."
     }
     if (step === "financial") {
-      if (!economicStartOn) return "Captura el inicio económico."
-      if (needsInitialAmount && !initialPeriodAmount.trim()) {
+      if (needsInitialAmount && initialPeriodChargeSelected && !initialPeriodAmount.trim()) {
         return "Captura el importe acordado para el primer periodo."
+      }
+      if (showInitialPeriodDecision && initialPeriodChargeSelected && !initialPeriodDueDate.trim()) {
+        return "Define cuándo este cargo se considerará vencido."
       }
       if (enrollmentFeeCoverage === "idle" || enrollmentFeeCoverage === "loading") {
         return "Espera a que confirmemos el estado de la inscripción."
@@ -196,21 +364,36 @@ export function NewEnrollmentSheet({
     setStudentQuery("")
     setStudentResults([])
     setStudent(null)
+    setNewStudentMode(false)
+    setStudentFullName("")
+    setStudentSex("H")
+    setStudentBirthDate("")
+    setContacts([{ full_name: "", relationship: "", phone: "", email: "" }])
     setEducationLevelId("")
     setGradeLevelId("")
     setGroupId("")
     setClassificationId("")
     setClassesStartOn("")
     setActivatedOn(today)
-    setEconomicStartOn(today)
     setInitialPeriodAmount("")
     setInitialPeriodDueDate("")
+    setInitialPeriodDecision("WAIVE")
+    setBaseAmount(null)
+    setDiscountCategories([])
+    setDiscountCategoryId("")
+    setFinancialOptionsState("idle")
     setEnrollmentFeeCoverage("idle")
     setEnrollmentFeeMode("FULL")
     setEnrollmentFeeAmount("")
     setReason("")
     setError(null)
     setSuccessId(null)
+    setCreatedStudentId(null)
+    setPendingCharges([])
+    setPaymentContext(null)
+    setCanReceiveForOthers(false)
+    setPaymentOpen(false)
+    setPaymentCompleted(false)
   }
 
   return (
@@ -237,9 +420,16 @@ export function NewEnrollmentSheet({
               <section className="space-y-4">
                 <div>
                   <h2 className="text-lg font-semibold">Alumno</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">Selecciona un alumno existente para este ciclo.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Selecciona un alumno existente o captura un alta nueva.</p>
                 </div>
-                {student ? (
+                <div className="grid gap-2 sm:grid-cols-2"><Choice label="Alumno existente" checked={!newStudentMode} onChange={() => { setNewStudentMode(false); setStudentFullName(""); setError(null) }} /><Choice label="Alumno nuevo" checked={newStudentMode} onChange={() => { setNewStudentMode(true); setStudent(null); setStudentQuery(""); setStudentResults([]); setEnrollmentFeeCoverage("idle"); setError(null) }} /></div>
+                {newStudentMode ? (
+                  <div className="space-y-4">
+                    <Field label="Nombre completo"><Input value={studentFullName} onChange={(event) => setStudentFullName(event.target.value)} placeholder="Nombre y apellidos" /></Field>
+                    <div className="grid gap-4 sm:grid-cols-2"><Field label="Sexo"><select value={studentSex} onChange={(event) => setStudentSex(event.target.value as "H" | "M")} className={selectClass}><option value="H">H</option><option value="M">M</option></select></Field><Field label="Fecha de nacimiento"><Input type="date" value={studentBirthDate} onChange={(event) => setStudentBirthDate(event.target.value)} /></Field></div>
+                    <div className="space-y-3"><div><h3 className="text-sm font-semibold">Contactos</h3><p className="mt-1 text-sm text-muted-foreground">Agrega al menos un contacto. Puedes agregar un segundo.</p></div>{contacts.map((contact, index) => <div key={index} className="space-y-3 rounded-lg border border-border p-4"><p className="text-sm font-medium">Contacto {index + 1}</p><Field label="Nombre completo"><Input value={contact.full_name} onChange={(event) => updateContact(index, "full_name", event.target.value)} /></Field><div className="grid gap-3 sm:grid-cols-2"><Field label="Parentesco"><Input value={contact.relationship} onChange={(event) => updateContact(index, "relationship", event.target.value)} placeholder="Madre, padre..." /></Field><Field label="Teléfono"><Input value={contact.phone} onChange={(event) => updateContact(index, "phone", event.target.value)} /></Field></div><Field label="Email (opcional)"><Input type="email" value={contact.email} onChange={(event) => updateContact(index, "email", event.target.value)} /></Field>{index === 1 && <Button type="button" variant="ghost" size="sm" onClick={() => setContacts((current) => current.slice(0, 1))}>Quitar contacto</Button>}</div>)}{contacts.length < 2 && <Button type="button" variant="outline" onClick={() => setContacts((current) => [...current, { full_name: "", relationship: "", phone: "", email: "" }])}><Plus /> Agregar contacto</Button>}</div>
+                  </div>
+                ) : student ? (
                   <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
                     <div className="min-w-0"><p className="truncate text-sm font-medium">{student.fullName}</p><p className="mt-1 text-xs text-muted-foreground">Alumno seleccionado</p></div>
                     <Button variant="ghost" size="sm" onClick={() => { setStudent(null); setEnrollmentFeeCoverage("idle") }}>Cambiar</Button>
@@ -268,22 +458,24 @@ export function NewEnrollmentSheet({
             {step === "financial" && (
               <section className="space-y-5">
                 <div><h2 className="text-lg font-semibold">Configuración financiera</h2><p className="mt-1 text-sm text-muted-foreground">Se aplicará el plan predeterminado de 12 pagos configurado para el ciclo y nivel.</p></div>
-                <Field label="Inicio económico"><Input type="date" value={economicStartOn} onChange={(event) => setEconomicStartOn(event.target.value)} /></Field>
-                {needsInitialAmount && <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4"><div><p className="text-sm font-medium">Primer cobro de ingreso tardío</p><p className="mt-1 text-sm text-muted-foreground">Captura el importe acordado. No calculamos este monto automáticamente.</p></div><div className="grid gap-4 sm:grid-cols-2"><Field label="Importe del primer periodo"><Input inputMode="decimal" value={initialPeriodAmount} onChange={(event) => setInitialPeriodAmount(event.target.value)} placeholder="0.00" /></Field><Field label="Fecha de vencimiento"><Input type="date" value={initialPeriodDueDate} onChange={(event) => setInitialPeriodDueDate(event.target.value)} /></Field></div></div>}
+                {newStudentMode && <section className="space-y-3 border-y border-border py-4"><div><h3 className="text-sm font-semibold">Beneficio de colegiatura</h3><p className="mt-1 text-sm text-muted-foreground">Se aplicará sobre la colegiatura base vigente para la fecha de ingreso.</p></div>{financialOptionsState === "loading" && <p className="text-sm text-muted-foreground">Consultando colegiatura y beneficios...</p>}{financialOptionsState === "error" && <p className="text-sm text-destructive">No pudimos consultar la colegiatura base y los beneficios.</p>}{financialOptionsState === "ready" && <Field label="Categoría"><select value={discountCategoryId} onChange={(event) => setDiscountCategoryId(event.target.value)} className={selectClass}><option value="">Sin beneficio</option>{discountCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></Field>}{baseAmount !== null && <dl className="grid gap-2 rounded-lg bg-muted/30 px-3 py-3 text-sm"><Summary label="Colegiatura base" value={formatCurrency(baseAmount)} /><Summary label="Beneficio" value={selectedDiscountCategory && selectedDiscountVersion ? `-${formatTuitionDiscountValue(selectedDiscountVersion.value, selectedDiscountCategory.discountType)} · ${tuitionDiscountTypeLabel(selectedDiscountCategory.discountType)}` : "Sin beneficio"} /><Summary label="Colegiatura individual" value={formatCurrency(individualAmount ?? baseAmount)} /></dl>}</section>}
+                {needsInitialAmount && <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4"><div><p className="text-sm font-medium">Primer periodo / ingreso inicial</p><p className="mt-1 text-sm text-muted-foreground">{showInitialPeriodDecision ? "Define si este segmento inicial genera un cobro." : "Captura el importe acordado para el ingreso dentro del periodo."}</p></div>{showInitialPeriodDecision && <div className="grid gap-2"><Choice label="No cobrar este periodo" checked={initialPeriodDecision === "WAIVE"} onChange={() => { setInitialPeriodDecision("WAIVE"); setInitialPeriodAmount(""); setInitialPeriodDueDate("") }} /><Choice label="Cobrar este periodo" checked={initialPeriodDecision === "CHARGE"} onChange={() => setInitialPeriodDecision("CHARGE")} /></div>}{initialPeriodChargeSelected && <div className="grid gap-4 sm:grid-cols-2"><Field label="Importe del primer periodo"><Input inputMode="decimal" value={initialPeriodAmount} onChange={(event) => setInitialPeriodAmount(event.target.value)} placeholder="0.00" /></Field>{showInitialPeriodDecision && <div><Field label="Fecha de vencimiento"><Input type="date" value={initialPeriodDueDate} onChange={(event) => setInitialPeriodDueDate(event.target.value)} /></Field><p className="mt-1 text-xs text-muted-foreground">Define cuándo este cargo se considerará vencido.</p></div>}</div>}</div>}
                 <div className="space-y-3 border-y border-border py-4"><div><h3 className="text-sm font-semibold">Inscripción</h3>{(enrollmentFeeCoverage === "idle" || enrollmentFeeCoverage === "loading") && <p className="mt-1 text-sm text-muted-foreground">Consultando cobertura de inscripción...</p>}{enrollmentFeeCoverage === "covered" && <p className="mt-1 text-sm text-emerald-700">Inscripción cubierta para este ciclo.</p>}{enrollmentFeeCoverage === "uncovered" && <p className="mt-1 text-sm text-muted-foreground">Debe generar inscripción.</p>}{enrollmentFeeCoverage === "error" && <div className="mt-1 flex items-center justify-between gap-3"><p className="text-sm text-destructive">No pudimos consultar la cobertura de inscripción.</p><Button type="button" variant="outline" size="sm" onClick={() => void loadEnrollmentFeeCoverage()}>Reintentar</Button></div>}</div>{enrollmentFeeCoverage === "uncovered" && <><div className="grid gap-2"><Choice label="Completa" checked={enrollmentFeeMode === "FULL"} onChange={() => setEnrollmentFeeMode("FULL")} /><Choice label="Proporcional" checked={enrollmentFeeMode === "PROPORTIONAL"} onChange={() => setEnrollmentFeeMode("PROPORTIONAL")} /></div>{enrollmentFeeMode === "PROPORTIONAL" && <Field label="Importe de inscripción"><Input inputMode="decimal" value={enrollmentFeeAmount} onChange={(event) => setEnrollmentFeeAmount(event.target.value)} placeholder="0.00" /></Field>}</>}</div>
                 <Field label="Motivo"><Textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ej. Alta al ciclo 2026-2027" rows={3} /></Field>
               </section>
             )}
 
-            {step === "review" && student && (
-              <section className="space-y-5"><div><h2 className="text-lg font-semibold">Resumen de matrícula</h2><p className="mt-1 text-sm text-muted-foreground">Revisa la información antes de activar la matrícula.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={student.fullName} /><Summary label="Ciclo" value={selectedCycle?.name ?? ""} /><Summary label="Grado" value={`${selectedLevel?.name ?? ""}${selectedLevel ? " " : ""}${selectedGrade?.name ?? ""}${groupLabel ? ` ${groupLabel}` : ""}`} /><Summary label="Clasificación" value={selectedClassification?.name ?? ""} /><Summary label="Fecha de activación" value={formatDate(activatedOn)} /><Summary label="Inicio económico" value={formatDate(economicStartOn)} /><Summary label="Plan" value="12 pagos predeterminado" /><Summary label="Colegiatura inicial" value={needsInitialAmount ? `$${initialPeriodAmount || "0.00"} acordado` : "Inicio de periodo · colegiatura vigente"} /><Summary label="Inscripción" value={enrollmentFeeCoverage === "covered" ? "Inscripción cubierta para este ciclo" : enrollmentFeeMode === "PROPORTIONAL" ? `Inscripción proporcional · $${enrollmentFeeAmount || "0.00"}` : "Inscripción completa"} /></dl></section>
+            {step === "review" && (student || newStudentMode) && (
+              <section className="space-y-5"><div><h2 className="text-lg font-semibold">Resumen de matrícula</h2><p className="mt-1 text-sm text-muted-foreground">Revisa la información antes de activar la matrícula.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={newStudentMode ? studentFullName : student?.fullName ?? ""} /><Summary label="Ciclo" value={selectedCycle?.name ?? ""} /><Summary label="Grado" value={`${selectedLevel?.name ?? ""}${selectedLevel ? " " : ""}${selectedGrade?.name ?? ""}${groupLabel ? ` ${groupLabel}` : ""}`} /><Summary label="Clasificación" value={selectedClassification?.name ?? ""} /><Summary label="Fecha efectiva de ingreso" value={formatDate(activatedOn)} />{newStudentMode && <><Summary label="Beneficio" value={selectedDiscountCategory?.name ?? "Sin beneficio"} /><Summary label="Colegiatura base" value={baseAmount === null ? "Sin dato" : formatCurrency(baseAmount)} /><Summary label="Colegiatura individual" value={individualAmount === null ? "Sin dato" : formatCurrency(individualAmount)} /></>}<Summary label="Plan" value="12 pagos predeterminado" /><Summary label="Colegiatura inicial" value={!needsInitialAmount ? "Inicio de periodo · colegiatura vigente" : !initialPeriodChargeSelected ? "No cobrar este periodo" : showInitialPeriodDecision ? `$${initialPeriodAmount || "0.00"} acordado · vence ${formatDate(initialPeriodDueDate)}` : `$${initialPeriodAmount || "0.00"} acordado`} /><Summary label="Inscripción" value={enrollmentFeeCoverage === "covered" ? "Inscripción cubierta para este ciclo" : enrollmentFeeMode === "PROPORTIONAL" ? `Inscripción proporcional · $${enrollmentFeeAmount || "0.00"}` : "Inscripción completa"} /></dl></section>
             )}
 
-            {step === "success" && successId && <section className="py-8 text-center"><CheckCircle2 className="mx-auto size-10 text-emerald-600" /><h2 className="mt-4 text-lg font-semibold">Matrícula activada</h2><p className="mt-2 text-sm text-muted-foreground">La matrícula, su acuerdo base y las colegiaturas quedaron registrados.</p><Link href="/admin/matricula" className="mt-6 inline-flex h-10 items-center rounded-lg border border-border bg-white px-3 text-sm font-medium hover:bg-muted">Ver matrículas</Link></section>}
+            {step === "payment" && createdStudentId && <section className="space-y-5"><div><h2 className="text-lg font-semibold">Pago pendiente</h2><p className="mt-1 text-sm text-muted-foreground">La matrícula quedó activa y tiene cargos pendientes.</p></div><div className="rounded-lg border border-border bg-muted/30 p-4 text-sm">Puedes registrar el pago ahora o hacerlo después desde la cuenta del alumno.</div><div className="flex flex-wrap gap-2"><Button type="button" onClick={() => setPaymentOpen(true)}>Registrar pago</Button><Button type="button" variant="outline" onClick={() => setStep("success")}>Registrar después</Button></div></section>}
+            {step === "success" && successId && <section className="py-8 text-center"><CheckCircle2 className="mx-auto size-10 text-emerald-600" /><h2 className="mt-4 text-lg font-semibold">Alumno creado y matrícula activada</h2><p className="mt-2 text-sm text-muted-foreground">El alumno, sus contactos y la matrícula quedaron registrados correctamente.</p>{paymentCompleted && <p className="mt-2 text-sm text-emerald-700">El pago quedó registrado.</p>}<Link href="/admin/matricula" className="mt-6 inline-flex h-10 items-center rounded-lg border border-border bg-white px-3 text-sm font-medium hover:bg-muted">Ver matrículas</Link></section>}
           </div>
 
-          {step !== "success" && <footer className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] sm:px-6"><Button variant="ghost" className="h-10" disabled={step === "student" || isPending} onClick={() => { setError(null); setStep(previousStep(step)) }}><ChevronLeft /> Atrás</Button>{step === "review" ? <Button className="h-10" disabled={isPending} onClick={submit}>{isPending && <LoaderCircle className="animate-spin" />}{isPending ? "Activando..." : "Activar matrícula"}</Button> : <Button className="h-10" onClick={next}>Continuar</Button>}</footer>}
+          {step !== "success" && step !== "payment" && <footer className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] sm:px-6"><Button variant="ghost" className="h-10" disabled={step === "student" || isPending} onClick={() => { setError(null); setStep(previousStep(step)) }}><ChevronLeft /> Atrás</Button>{step === "review" ? <Button className="h-10" disabled={isPending} onClick={submit}>{isPending && <LoaderCircle className="animate-spin" />}{isPending ? "Activando..." : "Activar matrícula"}</Button> : <Button className="h-10" onClick={next}>Continuar</Button>}</footer>}
           {error && <p className="border-t border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:px-6" role="alert">{error}</p>}
+          {createdStudentId && pendingCharges.length > 0 && paymentContext && <RegisterPaymentSheet student={{ id: createdStudentId, fullName: studentFullName, context: "Nueva matrícula" }} charges={pendingCharges} methods={paymentContext.methods} receivers={paymentContext.receivers} currentReceiverId={paymentContext.currentReceiverId} canReceiveForOthers={canReceiveForOthers} open={paymentOpen} onOpenChange={(nextOpen) => { setPaymentOpen(nextOpen); if (!nextOpen && paymentCompleted) setStep("success") }} hideTrigger onPaymentRegistered={() => setPaymentCompleted(true)} />}
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>
@@ -312,7 +504,7 @@ function Summary({ label, value }: { label: string; value: string }) {
 
 function nextStep(step: Step): Step { return ({ student: "academic", academic: "financial", financial: "review" } as const)[step as "student" | "academic" | "financial"] ?? step }
 function previousStep(step: Step): Step { return ({ academic: "student", financial: "academic", review: "financial" } as const)[step as "academic" | "financial" | "review"] ?? step }
-function stepLabel(step: Step) { return ({ student: "Paso 1 de 4 · Alumno", academic: "Paso 2 de 4 · Ciclo y grupo", financial: "Paso 3 de 4 · Finanzas", review: "Paso 4 de 4 · Resumen" } as const)[step as "student" | "academic" | "financial" | "review"] }
+function stepLabel(step: Step) { return ({ student: "Paso 1 de 4 · Alumno", academic: "Paso 2 de 4 · Ciclo y grupo", financial: "Paso 3 de 4 · Finanzas", review: "Paso 4 de 4 · Resumen", payment: "Pago pendiente", success: "" } as const)[step] }
 function dateInput(date: Date) { return date.toISOString().slice(0, 10) }
 function formatDate(value: string) { return value ? new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${value}T12:00:00`)) : "" }
 

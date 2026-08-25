@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache"
 
 import { mapEnrollmentError } from "@/lib/admin/enrollment-errors"
+import { mapPreregistrationCampaignError, mapPreregistrationIntakeError, mapPreregistrationRegistrationError, mapRetroactivePreregistrationError } from "@/lib/admin/preregistration-campaign-errors"
+import { getStudentChargeBalances, type StudentChargeBalance } from "@/lib/admin/student-account"
+import { getPaymentFormContext, type PaymentFormContext } from "@/lib/admin/payments"
+import { getTuitionDiscountCategories, type TuitionDiscountCategory } from "@/lib/admin/discount-categories"
 import { mapTuitionDiscountAssignmentError } from "@/lib/admin/tuition-discount-assignment-errors"
+import { buildStudentNameSearchPattern } from "@/lib/admin/students"
 import { requireRole } from "@/lib/auth/require-role"
 
 export type CreateEnrollmentInput = {
@@ -26,9 +31,101 @@ export type CreateEnrollmentResult =
   | { ok: true; enrollmentId: string }
   | { ok: false; message: string; stage?: "enrollment" | "agreement" | "financials" | "activation" }
 
+export type CreateNewStudentEnrollmentInput = {
+  studentFullName: string
+  studentSex: "H" | "M"
+  studentBirthDate: string
+  contacts: Array<{
+    full_name: string
+    relationship: string
+    phone: string
+    email: string
+  }>
+  cycleId: string
+  gradeLevelId: string
+  classificationId: string
+  discountCategoryId: string | null
+  groupId: string | null
+  activatedOn: string
+  classesStartOn: string | null
+  economicStartOn: string
+  initialPeriodAmount: string | null
+  initialPeriodDueDate: string | null
+  enrollmentFeeMode: "FULL" | "PROPORTIONAL" | null
+  enrollmentFeeAmount: string | null
+  reason: string
+}
+
+export type CreateNewStudentEnrollmentResult =
+  | {
+      ok: true
+      studentId: string
+      enrollmentId: string
+      charges: StudentChargeBalance[]
+      paymentContext: PaymentFormContext | null
+      canReceiveForOthers: boolean
+    }
+  | { ok: false; message: string }
+
+export type NewEnrollmentFinancialOptions = {
+  baseAmount: number | null
+  discountCategories: TuitionDiscountCategory[]
+}
+
 export type EnrollmentMutationResult =
   | { ok: true }
   | { ok: false; message: string }
+
+export async function getNewEnrollmentFinancialOptions(input: {
+  cycleId: string
+  educationLevelId: string
+  effectiveOn: string
+}): Promise<{ ok: true; data: NewEnrollmentFinancialOptions } | { ok: false; message: string }> {
+  if (!input.cycleId || !input.educationLevelId || !isDate(input.effectiveOn)) {
+    return { ok: true, data: { baseAmount: null, discountCategories: [] } }
+  }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { data: concept, error: conceptError } = await supabase
+    .from("financial_concepts")
+    .select("id")
+    .eq("code", "TUITION")
+    .maybeSingle()
+
+  if (conceptError || !concept?.id) return { ok: false, message: "No existe el concepto de colegiatura configurado." }
+
+  const { data: rates, error: ratesError } = await supabase
+    .from("base_rates")
+    .select("amount, valid_from, valid_until")
+    .eq("cycle_id", input.cycleId)
+    .eq("education_level_id", input.educationLevelId)
+    .eq("financial_concept_id", concept.id)
+    .lte("valid_from", input.effectiveOn)
+    .or(`valid_until.is.null,valid_until.gte.${input.effectiveOn}`)
+    .order("valid_from", { ascending: false })
+    .limit(1)
+
+  if (ratesError) return { ok: false, message: "No pudimos consultar la colegiatura base configurada." }
+
+  const amount = rates?.[0] ? Number(rates[0].amount) : Number.NaN
+  const categoriesResult = await getTuitionDiscountCategories(supabase, input.cycleId)
+  if (categoriesResult.error) return { ok: false, message: "No pudimos consultar los beneficios de colegiatura." }
+
+  const categories = categoriesResult.data.filter((category) => {
+    if (!category.isActive) return false
+    return category.versions.some((version) =>
+      version.validFrom <= input.effectiveOn && (!version.validUntil || version.validUntil >= input.effectiveOn)
+    )
+  })
+
+  return {
+    ok: true,
+    data: {
+      baseAmount: Number.isFinite(amount) ? amount : null,
+      discountCategories: categories,
+    },
+  }
+}
 
 type BulkEnrollmentItem = {
   studentId: string
@@ -48,6 +145,119 @@ export type BulkEnrollmentResult = {
   studentId: string
   success: boolean
   message: string | null
+}
+
+type BulkTuitionDiscountItem = {
+  enrollmentId: string
+  studentId: string
+  categoryId: string
+  currentPeriodAmount: string | null
+}
+
+export type BulkTuitionDiscountResult = {
+  studentId: string
+  success: boolean
+  message: string | null
+}
+
+export type ResolvePreregistrationInput = {
+  preregistrationId: string
+  studentId: string
+  classificationId: string
+  groupId: string
+  activatedOn: string
+  classesStartOn: string | null
+  economicStartOn: string
+  initialPeriodAmount: string | null
+  initialPeriodDueDate: string | null
+  enrollmentFeeMode: "FULL" | "PROPORTIONAL" | null
+  enrollmentFeeAmount: string | null
+  reason: string
+}
+
+export type CreatePreregistrationCampaignInput = {
+  targetCycleId: string
+  educationLevelId: string | null
+  name: string
+  startsOn: string
+  endsOn: string
+  price: string
+}
+
+export type EligiblePreregistrationStudent = {
+  id: string
+  fullName: string
+  studentCode: string | null
+}
+
+export type RegisterPreregistrationInCampaignInput = {
+  campaignId: string
+  studentId: string
+  targetGradeLevelId: string
+  notes: string | null
+}
+
+export type PreregistrationIntakeStudent = {
+  id: string
+  fullName: string
+  studentCode: string | null
+}
+
+export type PreregistrationIntakeContact = {
+  guardianId: string | null
+  fullName: string
+  phone: string
+  email: string
+  relationship: string
+}
+
+export type PreregistrationIntakeStudentDetail = PreregistrationIntakeStudent & {
+  contacts: PreregistrationIntakeContact[]
+  enrollmentHistory: Array<{ cycleId: string; cycleName: string; status: string }>
+  latestEnrollment: {
+    status: string
+    enrolledOn: string
+    cycle: { id: string; name: string; startsOn: string }
+    educationLevel: { id: string; name: string }
+    gradeLevel: { id: string; name: string; sortOrder: number }
+    group: { id: string; name: string; code: string } | null
+  } | null
+  suggestedDestination: {
+    cycleId: string
+    educationLevelId: string
+    gradeLevelId: string
+    groupId: string | null
+  } | null
+}
+
+export type CreatePreregistrationIntakeInput = {
+  preregisteredOn: string
+  studentId: string | null
+  studentFullName: string | null
+  targetCycleId: string
+  targetEducationLevelId: string
+  targetGradeLevelId: string
+  targetGroupId: string
+  campaignId: string
+  contacts: PreregistrationIntakeContact[]
+  notes: string | null
+}
+
+export type PreregistrationPaymentContext = {
+  studentId: string
+  studentFullName: string
+  charge: StudentChargeBalance
+}
+
+export type RetroactivePreregistrationStudent = {
+  id: string
+  fullName: string
+  studentCode: string | null
+  enrollment: {
+    enrolledOn: string
+    gradeLevelId: string
+    groupId: string | null
+  }
 }
 
 export async function createEnrollment(
@@ -90,6 +300,573 @@ export async function createEnrollment(
   revalidatePath(`/admin/alumnos/${input.studentId}`)
 
   return { ok: true, enrollmentId }
+}
+
+export async function createNewStudentEnrollment(
+  input: CreateNewStudentEnrollmentInput
+): Promise<CreateNewStudentEnrollmentResult> {
+  if (!input.studentFullName.trim()) return { ok: false, message: "Indica el nombre completo del alumno." }
+  if (!/[HM]/.test(input.studentSex)) return { ok: false, message: "Selecciona el sexo del alumno." }
+  if (!isDate(input.studentBirthDate)) return { ok: false, message: "Captura una fecha de nacimiento válida." }
+  if (input.contacts.length < 1 || input.contacts.length > 2) return { ok: false, message: "Agrega uno o dos contactos válidos." }
+  if (input.contacts.some((contact) => !contact.full_name.trim() || !contact.relationship.trim() || !contact.phone.trim())) {
+    return { ok: false, message: "Completa nombre, parentesco y teléfono del contacto principal." }
+  }
+
+  const validationMessage = validate({
+    studentId: "new-student",
+    cycleId: input.cycleId,
+    gradeLevelId: input.gradeLevelId,
+    groupId: input.groupId,
+    classificationId: input.classificationId,
+    classesStartOn: input.classesStartOn,
+    activatedOn: input.activatedOn,
+    economicStartOn: input.economicStartOn,
+    initialPeriodAmount: input.initialPeriodAmount,
+    initialPeriodDueDate: input.initialPeriodDueDate,
+    enrollmentFeeMode: input.enrollmentFeeMode,
+    enrollmentFeeAmount: input.enrollmentFeeAmount,
+    reason: input.reason,
+  })
+  if (validationMessage) return { ok: false, message: validationMessage }
+
+  const { supabase, roles, userId } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { data, error } = await supabase.rpc("create_new_student_enrollment", {
+    p_student_full_name: input.studentFullName.trim(),
+    p_student_sex: input.studentSex,
+    p_student_birth_date: input.studentBirthDate,
+    p_contacts: input.contacts.map((contact) => ({
+      full_name: contact.full_name.trim(),
+      relationship: contact.relationship.trim(),
+      phone: contact.phone.trim(),
+      email: contact.email.trim(),
+    })),
+    p_cycle_id: input.cycleId,
+    p_grade_level_id: input.gradeLevelId,
+    p_classification_id: input.classificationId,
+    p_discount_category_id: cleanText(input.discountCategoryId),
+    p_group_id: cleanText(input.groupId),
+    p_activated_on: input.activatedOn,
+    p_classes_start_on: cleanText(input.classesStartOn),
+    p_economic_start_on: input.economicStartOn,
+    p_initial_period_amount: cleanText(input.initialPeriodAmount),
+    p_initial_period_due_date: cleanText(input.initialPeriodDueDate),
+    p_enrollment_fee_mode: input.enrollmentFeeMode,
+    p_enrollment_fee_amount: input.enrollmentFeeMode === "PROPORTIONAL" ? cleanText(input.enrollmentFeeAmount) : null,
+    p_reason: input.reason.trim(),
+  })
+
+  const created = data as { student_id?: unknown; enrollment_id?: unknown } | null
+  const studentId = typeof created?.student_id === "string" ? created.student_id : ""
+  const enrollmentId = typeof created?.enrollment_id === "string" ? created.enrollment_id : ""
+  if (error || !studentId || !enrollmentId) {
+    return { ok: false, message: mapEnrollmentError(error?.message, "activation") }
+  }
+
+  const [chargesResult, paymentContextResult] = await Promise.all([
+    getStudentChargeBalances(supabase, studentId),
+    getPaymentFormContext(supabase, userId),
+  ])
+  if (chargesResult.error) return { ok: false, message: "El alumno fue creado, pero no pudimos consultar sus cargos pendientes. Revisa su cuenta." }
+
+  revalidatePath("/admin/matricula")
+  revalidatePath(`/admin/alumnos/${studentId}`)
+  return {
+    ok: true,
+    studentId,
+    enrollmentId,
+    charges: chargesResult.data.filter((charge) => Number(charge.outstandingAmount) > 0),
+    paymentContext: paymentContextResult.data,
+    canReceiveForOthers: roles.includes("MASTER"),
+  }
+}
+
+export async function resolvePreregistrationToEnrollment(
+  input: ResolvePreregistrationInput
+): Promise<CreateEnrollmentResult> {
+  if (!input.preregistrationId || !input.studentId || !input.classificationId || !input.groupId) {
+    return { ok: false, message: "Selecciona grupo y clasificación para activar la matrícula." }
+  }
+  if (![input.activatedOn, input.economicStartOn].every(isDate)) {
+    return { ok: false, message: "Captura fechas válidas para la matrícula." }
+  }
+  if (input.classesStartOn && !isDate(input.classesStartOn)) {
+    return { ok: false, message: "Captura una fecha válida de inicio de clases." }
+  }
+  if (input.initialPeriodDueDate && !isDate(input.initialPeriodDueDate)) {
+    return { ok: false, message: "Captura una fecha válida para el primer cobro." }
+  }
+  if (input.initialPeriodAmount && (!Number.isFinite(Number(input.initialPeriodAmount)) || Number(input.initialPeriodAmount) < 0)) {
+    return { ok: false, message: "El importe del primer cobro debe ser un monto válido." }
+  }
+  if (input.enrollmentFeeMode === "PROPORTIONAL" && (!input.enrollmentFeeAmount?.trim() || !Number.isFinite(Number(input.enrollmentFeeAmount)) || Number(input.enrollmentFeeAmount) < 0)) {
+    return { ok: false, message: "El importe de inscripción proporcional debe ser un monto válido." }
+  }
+  if (!input.reason.trim()) return { ok: false, message: "Indica el motivo de la matrícula." }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { data: enrollmentId, error } = await supabase.rpc("resolve_preregistration_to_enrollment", {
+    p_preregistration_id: input.preregistrationId,
+    p_classification_id: input.classificationId,
+    p_group_id: input.groupId,
+    p_activated_on: input.activatedOn,
+    p_classes_start_on: cleanText(input.classesStartOn),
+    p_economic_start_on: input.economicStartOn,
+    p_initial_period_amount: cleanText(input.initialPeriodAmount),
+    p_initial_period_due_date: cleanText(input.initialPeriodDueDate),
+    p_enrollment_fee_mode: input.enrollmentFeeMode,
+    p_enrollment_fee_amount: input.enrollmentFeeMode === "PROPORTIONAL" ? cleanText(input.enrollmentFeeAmount) : null,
+    p_reason: input.reason.trim(),
+  })
+
+  if (error || typeof enrollmentId !== "string" || !enrollmentId) {
+    return { ok: false, stage: "activation", message: mapEnrollmentError(error?.message, "preregistration") }
+  }
+
+  revalidatePath("/admin/matricula")
+  revalidatePath(`/admin/alumnos/${input.studentId}`)
+  return { ok: true, enrollmentId }
+}
+
+export async function createPreregistrationCampaign(
+  input: CreatePreregistrationCampaignInput
+): Promise<EnrollmentMutationResult> {
+  if (!input.targetCycleId) return { ok: false, message: "Selecciona un ciclo destino válido." }
+  if (!input.name.trim()) return { ok: false, message: "Indica un nombre para la campaña." }
+  if (![input.startsOn, input.endsOn].every(isDate)) return { ok: false, message: "Captura fechas válidas para la campaña." }
+  if (input.endsOn < input.startsOn) return { ok: false, message: "La fecha de fin debe ser igual o posterior a la fecha de inicio." }
+  if (!input.price.trim() || !Number.isFinite(Number(input.price)) || Number(input.price) < 0) return { ok: false, message: "El precio debe ser cero o mayor." }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { data: enrollmentFeeConcept, error: conceptError } = await supabase
+    .from("financial_concepts")
+    .select("id")
+    .eq("code", "ENROLLMENT_FEE")
+    .eq("is_active", true)
+    .maybeSingle()
+
+  if (conceptError || !enrollmentFeeConcept?.id) {
+    return { ok: false, message: "No existe un concepto activo de inscripción configurado." }
+  }
+
+  const { error } = await supabase.rpc("create_preregistration_campaign", {
+    p_target_cycle_id: input.targetCycleId,
+    p_education_level_id: cleanText(input.educationLevelId),
+    p_name: input.name.trim(),
+    p_starts_on: input.startsOn,
+    p_ends_on: input.endsOn,
+    p_price: input.price.trim(),
+    p_covered_concept_id: enrollmentFeeConcept.id,
+    p_allows_partial_payments: false,
+    p_non_continuation_policy: "MANUAL_REVIEW",
+    p_status: "ACTIVE",
+  })
+
+  if (error) return { ok: false, message: mapPreregistrationCampaignError(error.message) }
+  revalidatePath("/admin/matricula")
+  return { ok: true }
+}
+
+export async function searchEligiblePreregistrationStudents(input: {
+  campaignId: string
+  term: string
+}): Promise<{ data: EligiblePreregistrationStudent[]; error: boolean }> {
+  const term = input.term.trim()
+  if (!input.campaignId || term.length < 2) return { data: [], error: false }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { data: campaign, error: campaignError } = await supabase
+    .from("preregistration_campaigns")
+    .select("target_cycle_id")
+    .eq("id", input.campaignId)
+    .maybeSingle()
+
+  if (campaignError || !campaign?.target_cycle_id) return { data: [], error: true }
+
+  const [nameResult, codeResult] = await Promise.all([
+    supabase
+      .from("students")
+      .select("id, full_name, student_code")
+      .filter("full_name", "imatch", buildStudentNameSearchPattern(term))
+      .order("full_name", { ascending: true })
+      .limit(8),
+    supabase
+      .from("students")
+      .select("id, full_name, student_code")
+      .ilike("student_code", `%${term}%`)
+      .order("full_name", { ascending: true })
+      .limit(8),
+  ])
+
+  if (nameResult.error || codeResult.error) return { data: [], error: true }
+
+  const candidates = [...(nameResult.data ?? []), ...(codeResult.data ?? [])]
+    .filter((student, index, students) => students.findIndex((item) => item.id === student.id) === index)
+    .slice(0, 8)
+  const studentIds = candidates.map((student) => student.id)
+  if (!studentIds.length) return { data: [], error: false }
+
+  const [preregistrationResult, enrollmentResult] = await Promise.all([
+    supabase
+      .from("preregistrations")
+      .select("student_id")
+      .eq("target_cycle_id", campaign.target_cycle_id)
+      .in("student_id", studentIds),
+    supabase
+      .from("enrollments")
+      .select("student_id")
+      .eq("cycle_id", campaign.target_cycle_id)
+      .in("student_id", studentIds),
+  ])
+
+  if (preregistrationResult.error || enrollmentResult.error) return { data: [], error: true }
+
+  const unavailableStudentIds = new Set([
+    ...(preregistrationResult.data ?? []).map((item) => item.student_id),
+    ...(enrollmentResult.data ?? []).map((item) => item.student_id),
+  ])
+
+  return {
+    data: candidates
+      .filter((student) => !unavailableStudentIds.has(student.id))
+      .map((student) => ({ id: student.id, fullName: student.full_name, studentCode: student.student_code })),
+    error: false,
+  }
+}
+
+export async function registerPreregistrationInCampaign(
+  input: RegisterPreregistrationInCampaignInput
+): Promise<EnrollmentMutationResult> {
+  if (!input.campaignId || !input.studentId) return { ok: false, message: "Selecciona un alumno para la campaña." }
+  if (!input.targetGradeLevelId) return { ok: false, message: "Selecciona un grado destino válido." }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { error } = await supabase.rpc("register_preregistration_in_campaign", {
+    p_campaign_id: input.campaignId,
+    p_student_id: input.studentId,
+    p_target_grade_level_id: input.targetGradeLevelId,
+    p_notes: cleanText(input.notes),
+  })
+
+  if (error) return { ok: false, message: mapPreregistrationRegistrationError(error.message) }
+  revalidatePath("/admin/matricula")
+  return { ok: true }
+}
+
+export async function searchPreregistrationIntakeStudents(term: string): Promise<{
+  data: PreregistrationIntakeStudent[]
+  error: boolean
+}> {
+  const query = term.trim()
+  if (query.length < 2) return { data: [], error: false }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const [nameResult, codeResult] = await Promise.all([
+    supabase
+      .from("students")
+      .select("id, full_name, student_code")
+      .filter("full_name", "imatch", buildStudentNameSearchPattern(query))
+      .order("full_name", { ascending: true })
+      .limit(8),
+    supabase
+      .from("students")
+      .select("id, full_name, student_code")
+      .ilike("student_code", `%${query}%`)
+      .order("full_name", { ascending: true })
+      .limit(8),
+  ])
+
+  if (nameResult.error || codeResult.error) return { data: [], error: true }
+
+  return {
+    data: [...(nameResult.data ?? []), ...(codeResult.data ?? [])]
+      .filter((student, index, students) => students.findIndex((item) => item.id === student.id) === index)
+      .slice(0, 8)
+      .map((student) => ({ id: student.id, fullName: student.full_name, studentCode: student.student_code })),
+    error: false,
+  }
+}
+
+export async function getPreregistrationIntakeStudent(studentId: string): Promise<{
+  data: PreregistrationIntakeStudentDetail | null
+  error: boolean
+}> {
+  if (!studentId) return { data: null, error: false }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const [studentResult, contactsResult, enrollmentResult] = await Promise.all([
+    supabase
+      .from("students")
+      .select("id, full_name, student_code")
+      .eq("id", studentId)
+      .maybeSingle(),
+    supabase
+      .from("student_guardians")
+      .select("guardian_id, relationship, priority, guardians!inner(id, full_name, phone, email)")
+      .eq("student_id", studentId)
+      .eq("is_active", true)
+      .order("priority")
+      .limit(2),
+    supabase
+      .from("enrollments")
+      .select("status, enrolled_on, cycle_id, school_cycles!inner(id, name, starts_on), grade_levels!inner(id, name, education_level_id, sort_order, education_levels!inner(id, name)), groups(id, name, code)")
+      .eq("student_id", studentId)
+      .order("enrolled_on", { ascending: false })
+      .limit(12),
+  ])
+
+  if (studentResult.error || contactsResult.error || enrollmentResult.error || !studentResult.data) {
+    return { data: null, error: Boolean(studentResult.error || contactsResult.error || enrollmentResult.error) }
+  }
+
+  const latestEnrollmentRow = enrollmentResult.data?.[0]
+  const latestCycle = latestEnrollmentRow && (Array.isArray(latestEnrollmentRow.school_cycles) ? latestEnrollmentRow.school_cycles[0] : latestEnrollmentRow.school_cycles)
+  const latestGrade = latestEnrollmentRow && (Array.isArray(latestEnrollmentRow.grade_levels) ? latestEnrollmentRow.grade_levels[0] : latestEnrollmentRow.grade_levels)
+  const latestLevel = latestGrade && (Array.isArray(latestGrade.education_levels) ? latestGrade.education_levels[0] : latestGrade.education_levels)
+  const latestGroup = latestEnrollmentRow && (Array.isArray(latestEnrollmentRow.groups) ? latestEnrollmentRow.groups[0] : latestEnrollmentRow.groups)
+
+  let suggestedDestination: PreregistrationIntakeStudentDetail["suggestedDestination"] = null
+  if (latestCycle && latestGrade && latestLevel) {
+    const [nextCycleResult, nextGradeResult] = await Promise.all([
+      supabase
+        .from("school_cycles")
+        .select("id, name, starts_on")
+        .gt("starts_on", latestCycle.starts_on)
+        .order("starts_on", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("grade_levels")
+        .select("id, name, education_level_id, sort_order")
+        .eq("education_level_id", latestGrade.education_level_id)
+        .gt("sort_order", latestGrade.sort_order)
+        .order("sort_order", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+    ])
+
+    const nextCycle = nextCycleResult.data
+    const nextGrade = nextGradeResult.data
+    if (!nextCycleResult.error && !nextGradeResult.error && nextCycle && nextGrade) {
+      const { data: nextGroups } = await supabase
+        .from("groups")
+        .select("id, code")
+        .eq("cycle_id", nextCycle.id)
+        .eq("grade_level_id", nextGrade.id)
+        .eq("is_active", true)
+        .order("code", { ascending: true })
+
+      const matchingGroup = latestGroup && nextGroups?.find((group) => group.code === latestGroup.code)
+      const groupId = nextGroups?.length === 1 ? nextGroups[0].id : matchingGroup?.id ?? null
+      suggestedDestination = {
+        cycleId: nextCycle.id,
+        educationLevelId: latestGrade.education_level_id,
+        gradeLevelId: nextGrade.id,
+        groupId,
+      }
+    }
+  }
+
+  return {
+    data: {
+      id: studentResult.data.id,
+      fullName: studentResult.data.full_name,
+      studentCode: studentResult.data.student_code,
+      contacts: (contactsResult.data ?? []).flatMap((contact) => {
+        const guardian = Array.isArray(contact.guardians) ? contact.guardians[0] : contact.guardians
+        if (!guardian) return []
+        return [{
+          guardianId: contact.guardian_id,
+          fullName: guardian.full_name,
+          phone: guardian.phone ?? "",
+          email: guardian.email ?? "",
+          relationship: contact.relationship,
+        }]
+      }),
+      enrollmentHistory: (enrollmentResult.data ?? []).flatMap((enrollment) => {
+        const cycle = Array.isArray(enrollment.school_cycles) ? enrollment.school_cycles[0] : enrollment.school_cycles
+        return cycle ? [{ cycleId: cycle.id, cycleName: cycle.name, status: enrollment.status }] : []
+      }),
+      latestEnrollment: latestCycle && latestGrade && latestLevel
+        ? {
+            status: latestEnrollmentRow.status,
+            enrolledOn: latestEnrollmentRow.enrolled_on,
+            cycle: { id: latestCycle.id, name: latestCycle.name, startsOn: latestCycle.starts_on },
+            educationLevel: { id: latestGrade.education_level_id, name: latestLevel.name },
+            gradeLevel: { id: latestGrade.id, name: latestGrade.name, sortOrder: latestGrade.sort_order },
+            group: latestGroup
+              ? { id: latestGroup.id, name: latestGroup.name, code: latestGroup.code }
+              : null,
+          }
+        : null,
+      suggestedDestination,
+    },
+    error: false,
+  }
+}
+
+export async function createPreregistrationIntake(
+  input: CreatePreregistrationIntakeInput
+): Promise<{ ok: true; preregistrationId: string; historical: boolean; historicalChargeStatus: "PENDING" | "COVERED" | "UNLINKED" | "REVIEW" | null; payment: PreregistrationPaymentContext | null } | { ok: false; message: string }> {
+  if (!isDate(input.preregisteredOn)) return { ok: false, message: "Captura una fecha de preinscripción válida." }
+  if (!input.studentId && !input.studentFullName?.trim()) return { ok: false, message: "Captura el nombre completo del alumno nuevo." }
+  if (!input.targetCycleId || !input.targetEducationLevelId || !input.targetGradeLevelId || !input.targetGroupId || !input.campaignId) {
+    return { ok: false, message: "Selecciona ciclo, nivel, grado, grupo y campaña." }
+  }
+  if (!input.contacts.length) return { ok: false, message: "Agrega al menos un contacto." }
+  if (input.contacts.length > 2) return { ok: false, message: "Solo puedes registrar un máximo de dos contactos." }
+  if (input.contacts.some((contact) => !contact.fullName.trim() || !contact.phone.trim())) {
+    return { ok: false, message: "Captura el nombre y teléfono de cada contacto." }
+  }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { data: preregistrationId, error } = await supabase.rpc("create_preregistration_intake", {
+    p_preregistered_on: input.preregisteredOn,
+    p_student_id: input.studentId,
+    p_student_full_name: input.studentId ? null : cleanText(input.studentFullName),
+    p_target_cycle_id: input.targetCycleId,
+    p_target_education_level_id: input.targetEducationLevelId,
+    p_target_grade_level_id: input.targetGradeLevelId,
+    p_target_group_id: input.targetGroupId,
+    p_campaign_id: input.campaignId,
+    p_contacts: input.contacts.map((contact) => ({
+      guardian_id: contact.guardianId,
+      full_name: contact.fullName.trim(),
+      phone: contact.phone.trim(),
+      email: cleanText(contact.email),
+      relationship: cleanText(contact.relationship),
+    })),
+    p_notes: cleanText(input.notes),
+  })
+
+  if (error || typeof preregistrationId !== "string" || !preregistrationId) {
+    return { ok: false, message: mapPreregistrationIntakeError(error?.message) }
+  }
+
+  const { data: preregistration } = await supabase
+    .from("preregistrations")
+    .select("student_id, charge_id, status, students!inner(full_name)")
+    .eq("id", preregistrationId)
+    .maybeSingle()
+  const student = preregistration?.students
+  const studentRecord = Array.isArray(student) ? student[0] : student
+  const historical = preregistration?.status === "RESOLVED"
+  const chargeBalances = preregistration?.student_id && preregistration.charge_id
+    ? await getStudentChargeBalances(supabase, preregistration.student_id)
+    : null
+  const charge = preregistration?.charge_id
+    ? chargeBalances?.data.find((item) => item.id === preregistration.charge_id) ?? null
+    : null
+  const historicalChargeStatus = historical
+    ? !preregistration?.charge_id
+      ? "UNLINKED" as const
+      : chargeBalances?.error
+        ? "REVIEW" as const
+        : charge && Number(charge.outstandingAmount) > 0
+        ? "PENDING" as const
+        : "COVERED" as const
+    : null
+
+  revalidatePath("/admin/matricula")
+  if (input.studentId) revalidatePath(`/admin/alumnos/${input.studentId}`)
+  return {
+    ok: true,
+    preregistrationId,
+    historical,
+    historicalChargeStatus,
+    payment: preregistration?.student_id && studentRecord && charge && (!historical || historicalChargeStatus === "PENDING")
+      ? { studentId: preregistration.student_id, studentFullName: studentRecord.full_name, charge }
+      : null,
+  }
+}
+
+export async function searchRetroactivePreregistrationStudents(input: {
+  campaignId: string
+  term: string
+}): Promise<{ data: RetroactivePreregistrationStudent[]; error: boolean }> {
+  const term = input.term.trim()
+  if (!input.campaignId || term.length < 2) return { data: [], error: false }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { data: campaign, error: campaignError } = await supabase
+    .from("preregistration_campaigns")
+    .select("target_cycle_id")
+    .eq("id", input.campaignId)
+    .maybeSingle()
+  if (campaignError || !campaign?.target_cycle_id) return { data: [], error: true }
+
+  const [nameResult, codeResult] = await Promise.all([
+    supabase.from("students").select("id, full_name, student_code").filter("full_name", "imatch", buildStudentNameSearchPattern(term)).order("full_name").limit(8),
+    supabase.from("students").select("id, full_name, student_code").ilike("student_code", `%${term}%`).order("full_name").limit(8),
+  ])
+  if (nameResult.error || codeResult.error) return { data: [], error: true }
+
+  const candidates = [...(nameResult.data ?? []), ...(codeResult.data ?? [])]
+    .filter((student, index, students) => students.findIndex((item) => item.id === student.id) === index)
+    .slice(0, 8)
+  const studentIds = candidates.map((student) => student.id)
+  if (!studentIds.length) return { data: [], error: false }
+
+  const { data: enrollments, error: enrollmentError } = await supabase
+    .from("enrollments")
+    .select("student_id, enrolled_on, grade_level_id, group_id")
+    .eq("cycle_id", campaign.target_cycle_id)
+    .in("student_id", studentIds)
+  if (enrollmentError) return { data: [], error: true }
+
+  const enrollmentsByStudent = new Map((enrollments ?? []).map((enrollment) => [enrollment.student_id, enrollment]))
+  return {
+    data: candidates.flatMap((student) => {
+      const enrollment = enrollmentsByStudent.get(student.id)
+      if (!enrollment) return []
+      return [{
+        id: student.id,
+        fullName: student.full_name,
+        studentCode: student.student_code,
+        enrollment: {
+          enrolledOn: enrollment.enrolled_on,
+          gradeLevelId: enrollment.grade_level_id,
+          groupId: enrollment.group_id,
+        },
+      }]
+    }),
+    error: false,
+  }
+}
+
+export async function createRetroactivePreregistration(input: {
+  studentId: string
+  campaignId: string
+  preregisteredOn: string
+  targetGradeLevelId: string
+  targetGroupId: string
+  notes: string | null
+}): Promise<{ ok: true; linkedCharge: boolean } | { ok: false; message: string }> {
+  if (!input.studentId || !input.campaignId || !input.targetGradeLevelId || !input.targetGroupId || !isDate(input.preregisteredOn)) {
+    return { ok: false, message: "Completa alumno, campaña, fecha, grado y grupo." }
+  }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { data: preregistrationId, error } = await supabase.rpc("create_retroactive_preregistration", {
+    p_student_id: input.studentId,
+    p_campaign_id: input.campaignId,
+    p_preregistered_on: input.preregisteredOn,
+    p_target_grade_level_id: input.targetGradeLevelId,
+    p_target_group_id: input.targetGroupId,
+    p_notes: cleanText(input.notes),
+  })
+  if (error || typeof preregistrationId !== "string" || !preregistrationId) {
+    return { ok: false, message: mapRetroactivePreregistrationError(error?.message) }
+  }
+
+  const { data: preregistration } = await supabase
+    .from("preregistrations")
+    .select("charge_id")
+    .eq("id", preregistrationId)
+    .maybeSingle()
+  revalidatePath("/admin/matricula")
+  revalidatePath(`/admin/alumnos/${input.studentId}`)
+  return { ok: true, linkedCharge: Boolean(preregistration?.charge_id) }
 }
 
 export async function changeEnrollmentFinancialPlan(input: {
@@ -195,6 +972,63 @@ export async function setEnrollmentTuitionDiscount(input: {
   revalidatePath(`/admin/alumnos/${input.studentId}`)
   revalidatePath(`/admin/alumnos/${input.studentId}/cuenta`)
   return { ok: true }
+}
+
+export async function bulkSetEnrollmentTuitionDiscount(input: {
+  items: BulkTuitionDiscountItem[]
+  effectiveOn: string
+  effectMode: "CURRENT" | "NEXT" | "PROPORTIONAL"
+  reason: string
+}): Promise<{ ok: true; results: BulkTuitionDiscountResult[] } | { ok: false; message: string }> {
+  if (!input.items.length) return { ok: false, message: "Selecciona al menos un alumno para asignar el descuento." }
+  if (!isDate(input.effectiveOn)) return { ok: false, message: "Captura una fecha efectiva válida." }
+  if (!input.reason.trim()) return { ok: false, message: "Indica el motivo del descuento." }
+
+  for (const item of input.items) {
+    if (!item.enrollmentId || !item.studentId || !item.categoryId) {
+      return { ok: false, message: "Selecciona una categoría para todos los alumnos." }
+    }
+    if (input.effectMode === "PROPORTIONAL") {
+      const amount = cleanText(item.currentPeriodAmount)
+      if (!amount || !Number.isFinite(Number(amount)) || Number(amount) < 0) {
+        return { ok: false, message: "Captura un monto final válido para todos los alumnos seleccionados." }
+      }
+    }
+  }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const results = await Promise.all(input.items.map(async (item): Promise<BulkTuitionDiscountResult> => {
+    try {
+      const { error } = await supabase.rpc("set_enrollment_tuition_discount", {
+        p_enrollment_id: item.enrollmentId,
+        p_category_id: item.categoryId,
+        p_effective_on: input.effectiveOn,
+        p_effect_mode: input.effectMode,
+        p_current_period_amount: input.effectMode === "PROPORTIONAL" ? cleanText(item.currentPeriodAmount) : null,
+        p_reason: input.reason.trim(),
+      })
+
+      return {
+        studentId: item.studentId,
+        success: !error,
+        message: error ? mapTuitionDiscountAssignmentError(error.message) : null,
+      }
+    } catch {
+      return {
+        studentId: item.studentId,
+        success: false,
+        message: "No pudimos asignar el descuento. Inténtalo de nuevo.",
+      }
+    }
+  }))
+
+  revalidatePath("/admin/matricula")
+  for (const result of results.filter((result) => result.success)) {
+    revalidatePath(`/admin/alumnos/${result.studentId}`)
+    revalidatePath(`/admin/alumnos/${result.studentId}/cuenta`)
+  }
+
+  return { ok: true, results }
 }
 
 export async function withdrawEnrollment(input: {
