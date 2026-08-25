@@ -18,6 +18,7 @@ export type EnrollmentListItem = {
   cycle: { name: string; startsOn: string; endsOn: string }
   status: string
   enrolledOn: string
+  economicStartOn: string
   closedOn: string | null
   classesStartOn: string | null
   student: { id: string; fullName: string; studentCode: string | null }
@@ -70,7 +71,7 @@ export async function getEnrollments(
   let query = supabase
     .from("enrollments")
     .select(
-      "id, cycle_id, status, enrolled_on, closed_on, classes_start_on, school_cycles!inner(name, starts_on, ends_on), students!inner(id, full_name, student_code), grade_levels!inner(id, name, education_level_id, education_levels!inner(id, name)), groups(id, name, code), enrollment_classifications!inner(id, name), enrollment_financial_plan_assignments(id, financial_plan_id, valid_until, financial_plans!inner(id, installment_count, cycle_id, education_level_id, status)), student_financial_agreements(agreed_amount, base_amount_snapshot, valid_from, valid_until, financial_concepts!inner(code)), enrollment_tuition_discount_assignments(valid_from, valid_until, tuition_discount_categories(id, name, discount_type))"
+      "id, cycle_id, status, enrolled_on, closed_on, classes_start_on, school_cycles!inner(name, starts_on, ends_on), students!inner(id, full_name, student_code), grade_levels!inner(id, name, education_level_id, education_levels!inner(id, name)), groups(id, name, code), enrollment_classifications!inner(id, name), enrollment_financial_plan_assignments(id, financial_plan_id, economic_start_on, valid_until, financial_plans!inner(id, installment_count, cycle_id, education_level_id, status)), student_financial_agreements(agreed_amount, base_amount_snapshot, valid_from, valid_until, financial_concepts!inner(code)), enrollment_tuition_discount_assignments(valid_from, valid_until, tuition_discount_categories(id, name, discount_type))"
     )
     .eq("cycle_id", filters.cycleId)
     .order("enrolled_on", { ascending: false })
@@ -133,10 +134,10 @@ export async function getEnrollments(
       })
       const currentTuition = currentTuitionAgreement && Number.isFinite(Number(currentTuitionAgreement.base_amount_snapshot)) && Number.isFinite(Number(currentTuitionAgreement.agreed_amount))
         ? {
-            baseAmount: Number(currentTuitionAgreement.base_amount_snapshot),
-            agreedAmount: Number(currentTuitionAgreement.agreed_amount),
-            validFrom: text(currentTuitionAgreement.valid_from),
-          }
+          baseAmount: Number(currentTuitionAgreement.base_amount_snapshot),
+          agreedAmount: Number(currentTuitionAgreement.agreed_amount),
+          validFrom: text(currentTuitionAgreement.valid_from),
+        }
         : null
       const currentDiscountAssignment = asRecords(row.enrollment_tuition_discount_assignments).find(
         (assignment) => assignment.valid_until === null
@@ -145,11 +146,11 @@ export async function getEnrollments(
       const discountType = text(currentDiscountCategory?.discount_type)
       const currentDiscount = currentDiscountAssignment && currentDiscountCategory && (discountType === "PERCENTAGE" || discountType === "FIXED_AMOUNT")
         ? {
-            categoryId: text(currentDiscountCategory.id),
-            name: text(currentDiscountCategory.name),
-            discountType: discountType as "PERCENTAGE" | "FIXED_AMOUNT",
-            validFrom: text(currentDiscountAssignment.valid_from),
-          }
+          categoryId: text(currentDiscountCategory.id),
+          name: text(currentDiscountCategory.name),
+          discountType: discountType as "PERCENTAGE" | "FIXED_AMOUNT",
+          validFrom: text(currentDiscountAssignment.valid_from),
+        }
         : null
 
       if (!student || !cycle || !gradeLevel || !educationLevel || !classification) return []
@@ -160,6 +161,7 @@ export async function getEnrollments(
         cycle: { name: text(cycle.name), startsOn: text(cycle.starts_on), endsOn: text(cycle.ends_on) },
         status: text(row.status),
         enrolledOn: text(row.enrolled_on),
+        economicStartOn: text(currentAssignment?.economic_start_on),
         closedOn: typeof row.closed_on === "string" ? row.closed_on : null,
         classesStartOn: typeof row.classes_start_on === "string" ? row.classes_start_on : null,
         student: {
@@ -241,8 +243,8 @@ export async function getEnrollmentFinancialCoverage(
       educationLevelId: plan.education_level_id,
       months: (periods ?? []).flatMap((period) =>
         period.financial_plan_id === plan.id &&
-        typeof period.coverage_year === "number" &&
-        typeof period.coverage_month === "number"
+          typeof period.coverage_year === "number" &&
+          typeof period.coverage_month === "number"
           ? [{ year: period.coverage_year, month: period.coverage_month, dueDate: typeof period.due_date === "string" ? period.due_date : "" }]
           : []
       ),

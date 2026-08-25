@@ -1224,6 +1224,58 @@ export async function reactivateEnrollmentFinancial(input: {
   return { ok: true }
 }
 
+export async function regularizeEnrollmentFinancialStart(input: {
+  enrollmentId: string
+  studentId: string
+  economicStartOn: string
+  initialPeriodAmount: string | null
+  initialPeriodDueDate: string | null
+  reason: string
+}): Promise<EnrollmentMutationResult> {
+  if (!input.enrollmentId || !input.studentId || !isDate(input.economicStartOn)) {
+    return { ok: false, message: "Captura una fecha de inicio económico válida." }
+  }
+  if (!input.reason.trim()) return { ok: false, message: "Indica el motivo de la regularización." }
+
+  const amount = cleanText(input.initialPeriodAmount)
+  const dueDate = cleanText(input.initialPeriodDueDate)
+  if (amount && (!Number.isFinite(Number(amount)) || Number(amount) < 0)) {
+    return { ok: false, message: "El importe del primer periodo debe ser válido." }
+  }
+  if (dueDate && !isDate(dueDate)) return { ok: false, message: "Captura una fecha de vencimiento válida." }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { error } = await supabase.rpc("regularize_enrollment_financial_start", {
+    p_enrollment_id: input.enrollmentId,
+    p_economic_start_on: input.economicStartOn,
+    p_initial_period_amount: amount,
+    p_initial_period_due_date: dueDate,
+    p_reason: input.reason.trim(),
+  })
+
+  if (error) return { ok: false, message: mapFinancialStartRegularizationError(error.message) }
+  revalidatePath("/admin/matricula")
+  revalidatePath(`/admin/alumnos/${input.studentId}`)
+  revalidatePath(`/admin/alumnos/${input.studentId}/cuenta`)
+  return { ok: true }
+}
+
+function mapFinancialStartRegularizationError(message: string | undefined) {
+  const technical = message?.toLowerCase() ?? ""
+  if (technical.includes("applied payment") || technical.includes("applied credit") || technical.includes("credit applied")) {
+    return "No se puede regularizar el inicio porque hay pagos o saldos a favor aplicados. Corrige primero su aplicación."
+  }
+  if (technical.includes("below already applied amount") || technical.includes("less than applied")) {
+    return "El importe inicial no puede ser menor a los fondos ya aplicados."
+  }
+  if (technical.includes("must belong") || technical.includes("outside enrollment cycle") || technical.includes("enrollment cycle")) {
+    return "La fecha de inicio económico debe estar dentro del ciclo escolar."
+  }
+  if (technical.includes("active enrollment")) return "Solo se puede regularizar una matrícula activa."
+  if (process.env.NODE_ENV !== "production" && message) return `No pudimos regularizar el inicio financiero. Detalle: ${message}`
+  return "No pudimos regularizar el inicio financiero. Revisa los datos e inténtalo de nuevo."
+}
+
 function validateMutationInput(effectiveOn: string, reason: string, action: "plan" | "group" | "classification") {
   if (!isDate(effectiveOn)) return "Captura una fecha efectiva válida."
   if (!reason.trim()) return `Indica el motivo del cambio de ${action}.`

@@ -5,7 +5,7 @@ import { Menu } from "@base-ui/react/menu"
 import { Toast } from "@base-ui/react/toast"
 import { ChevronLeft, Ellipsis, LoaderCircle, X } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 
 import {
   changeEnrollmentClassification,
@@ -13,6 +13,7 @@ import {
   changeEnrollmentGroup,
   getEnrollmentFeeCoverage,
   reactivateEnrollmentFinancial,
+  regularizeEnrollmentFinancialStart,
   setEnrollmentTuitionDiscount,
   withdrawEnrollment,
 } from "@/app/admin/matricula/actions"
@@ -31,7 +32,7 @@ import { calculateTuitionDiscountPreview, formatCurrency, formatTuitionDiscountV
 
 type GroupOption = { id: string; name: string; code: string; cycle_id: string; grade_level_id: string }
 type ClassificationOption = { id: string; name: string }
-type ActionMode = "plan" | "group" | "classification" | "discount" | "withdrawal" | "reactivation"
+type ActionMode = "plan" | "group" | "classification" | "discount" | "withdrawal" | "reactivation" | "regularization"
 
 type EnrollmentActionsProps = {
   enrollment: EnrollmentListItem
@@ -59,6 +60,8 @@ export function EnrollmentActions({
   const [currentPeriodAmount, setCurrentPeriodAmount] = useState("")
   const [futureMode, setFutureMode] = useState<"STOP_FUTURE" | "KEEP_REMAINING">("STOP_FUTURE")
   const [economicStartOn, setEconomicStartOn] = useState(dateInput(new Date()))
+  const [regularizationAmount, setRegularizationAmount] = useState("")
+  const [regularizationDueDate, setRegularizationDueDate] = useState("")
   const [initialTuitionMode, setInitialTuitionMode] = useState<"FULL" | "PROPORTIONAL">("FULL")
   const [initialTuitionAmount, setInitialTuitionAmount] = useState("")
   const [enrollmentFeeCoverage, setEnrollmentFeeCoverage] = useState<"loading" | "covered" | "uncovered" | "error" | null>(null)
@@ -97,6 +100,28 @@ export function EnrollmentActions({
       coverage.cycleId === enrollment.cycleId &&
       coverage.educationLevelId === enrollment.educationLevel.id
   )
+  const regularizationCoverage = reactivationCoverage
+  const regularizationPeriod = regularizationCoverage?.months.find((period) => {
+    const [year, month] = economicStartOn.split("-").map(Number)
+    return period.year === year && period.month === month
+  }) ?? null
+  const firstRegularizationPeriod = regularizationCoverage?.months.reduce((earliest, period) =>
+    period.year * 12 + period.month < earliest.year * 12 + earliest.month ? period : earliest
+  , regularizationCoverage.months[0] ?? null) ?? null
+  const firstRegularizationPeriodStart = firstRegularizationPeriod
+    ? `${firstRegularizationPeriod.year}-${String(firstRegularizationPeriod.month).padStart(2, "0")}-01`
+    : null
+  const regularizationBeforeFirstPeriod = Boolean(firstRegularizationPeriodStart && economicStartOn < firstRegularizationPeriodStart)
+  const regularizationIsPartial = isPartialCoverageMonth(economicStartOn, regularizationCoverage?.months ?? [])
+  const regularizationNeedsAmount = regularizationBeforeFirstPeriod || regularizationIsPartial
+  const currentIndividualAmount = enrollment.currentTuition?.agreedAmount ?? null
+  const regularizationSuggestedAmount = (() => {
+    if (!regularizationNeedsAmount || currentIndividualAmount === null || !isDate(economicStartOn)) return ""
+    const [year, month, day] = economicStartOn.split("-").map(Number)
+    const daysInMonth = new Date(year, month, 0).getDate()
+    const applicableDays = daysInMonth - day + 1
+    return (Math.round(currentIndividualAmount * applicableDays / daysInMonth * 100) / 100).toFixed(2)
+  })()
   const reactivationIsPartial = isPartialCoverageMonth(economicStartOn, reactivationCoverage?.months ?? [])
   const reactivationTuitionAgreement = enrollment.tuitionAgreements.find(
     (agreement) =>
@@ -112,6 +137,16 @@ export function EnrollmentActions({
   const discountPreview = selectedDiscountVersion && enrollment.currentTuition
     ? calculateTuitionDiscountPreview(enrollment.currentTuition.baseAmount, selectedDiscountCategory?.discountType ?? "FIXED_AMOUNT", selectedDiscountVersion.value)
     : null
+
+  useEffect(() => {
+    if (mode !== "regularization") return
+    const update = window.setTimeout(() => {
+      if (regularizationSuggestedAmount) setRegularizationAmount(regularizationSuggestedAmount)
+      else setRegularizationAmount("")
+      setRegularizationDueDate(regularizationBeforeFirstPeriod ? "" : regularizationPeriod?.dueDate ?? "")
+    }, 0)
+    return () => window.clearTimeout(update)
+  }, [mode, regularizationBeforeFirstPeriod, regularizationPeriod, regularizationSuggestedAmount])
 
   const selectedTarget = useMemo(() => {
     if (mode === "withdrawal" || mode === "reactivation" || mode === "discount") return null
@@ -132,7 +167,9 @@ export function EnrollmentActions({
     setCurrentPeriodAction("KEEP_FULL")
     setCurrentPeriodAmount("")
     setFutureMode("STOP_FUTURE")
-    setEconomicStartOn(dateInput(new Date()))
+    setEconomicStartOn(nextMode === "regularization" ? enrollment.economicStartOn : dateInput(new Date()))
+    setRegularizationAmount("")
+    setRegularizationDueDate("")
     setInitialTuitionMode("FULL")
     setInitialTuitionAmount("")
     setEnrollmentFeeCoverage(nextMode === "reactivation" ? "loading" : null)
@@ -168,6 +205,36 @@ export function EnrollmentActions({
 
   function review() {
     if (!mode) return
+    if (mode === "regularization") {
+      const firstAllowedDate = enrollment.enrolledOn > enrollment.cycle.startsOn ? enrollment.enrolledOn : enrollment.cycle.startsOn
+      if (enrollment.status !== "ACTIVA") {
+        setError("Solo se puede regularizar una matrícula activa.")
+        return
+      }
+      if (!isDate(economicStartOn) || economicStartOn < firstAllowedDate || economicStartOn > enrollment.cycle.endsOn) {
+        setError(`La nueva fecha debe estar entre ${formatDate(firstAllowedDate)} y ${formatDate(enrollment.cycle.endsOn)}.`)
+        return
+      }
+      if (economicStartOn === enrollment.economicStartOn) {
+        setError("La nueva fecha debe ser diferente al inicio económico actual.")
+        return
+      }
+      if (regularizationNeedsAmount && (!regularizationAmount.trim() || !Number.isFinite(Number(regularizationAmount)) || Number(regularizationAmount) < 0)) {
+        setError("Captura un importe válido para el periodo inicial.")
+        return
+      }
+      if (regularizationBeforeFirstPeriod && !regularizationDueDate.trim()) {
+        setError("Define cuándo este cargo se considerará vencido.")
+        return
+      }
+      if (!reason.trim()) {
+        setError("Indica el motivo de la regularización.")
+        return
+      }
+      setError(null)
+      setStep("review")
+      return
+    }
     if (mode === "reactivation") {
       const firstAllowedDate = enrollment.closedOn && enrollment.closedOn > enrollment.cycle.startsOn
         ? enrollment.closedOn
@@ -268,6 +335,30 @@ export function EnrollmentActions({
 
   function submit() {
     if (!mode) return
+
+    if (mode === "regularization") {
+      startTransition(async () => {
+        const result = await regularizeEnrollmentFinancialStart({
+          enrollmentId: enrollment.id,
+          studentId: enrollment.student.id,
+          economicStartOn,
+          initialPeriodAmount: regularizationNeedsAmount ? regularizationAmount : null,
+          initialPeriodDueDate: regularizationBeforeFirstPeriod ? regularizationDueDate : regularizationPeriod?.dueDate ?? null,
+          reason,
+        })
+
+        if (!result.ok) {
+          setError(result.message)
+          setStep("form")
+          return
+        }
+
+        toastManager.add({ title: "Inicio financiero regularizado", description: "La matrícula se actualizó correctamente." })
+        close()
+        router.refresh()
+      })
+      return
+    }
 
     if (mode === "reactivation") {
       if (!targetId) return
@@ -416,6 +507,7 @@ export function EnrollmentActions({
                 Cambiar clasificación
               </Menu.Item></>}
               {enrollment.status === "ACTIVA" && <Menu.Item onClick={() => openAction("discount")} disabled={!enrollment.currentTuition || !discountCategories.length} className="flex h-9 items-center rounded-lg px-2 text-sm outline-none hover:bg-muted data-disabled:pointer-events-none data-disabled:opacity-50">Asignar descuento</Menu.Item>}
+              {enrollment.status === "ACTIVA" && <Menu.Item onClick={() => openAction("regularization")} className="flex h-9 items-center rounded-lg px-2 text-sm outline-none hover:bg-muted">Regularizar inicio financiero</Menu.Item>}
               {enrollment.status === "ACTIVA" && <><Menu.Separator className="my-1 h-px bg-border" /><Menu.Item onClick={() => openAction("withdrawal")} className="flex h-9 items-center rounded-lg px-2 text-sm text-destructive outline-none hover:bg-destructive/10">Dar de baja</Menu.Item></>}
               {enrollment.status === "BAJA" && <Menu.Item onClick={() => void openAction("reactivation")} className="flex h-9 items-center rounded-lg px-2 text-sm outline-none hover:bg-muted">Reactivar</Menu.Item>}
             </Menu.Popup>
@@ -437,24 +529,26 @@ export function EnrollmentActions({
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-            {step === "form" && mode && mode !== "reactivation" && mode !== "discount" && <ActionForm mode={mode} enrollment={enrollment} targetId={targetId} setTargetId={setTargetId} effectiveOn={effectiveOn} setEffectiveOn={setEffectiveOn} reason={reason} setReason={setReason} groups={compatibleGroups} classifications={availableClassifications} plans={compatiblePlans} planAvailable={planAvailable} currentPeriodAction={currentPeriodAction} setCurrentPeriodAction={setCurrentPeriodAction} currentPeriodAmount={currentPeriodAmount} setCurrentPeriodAmount={setCurrentPeriodAmount} futureMode={futureMode} setFutureMode={setFutureMode} />}
+            {step === "form" && mode && mode !== "reactivation" && mode !== "discount" && mode !== "regularization" && <ActionForm mode={mode} enrollment={enrollment} targetId={targetId} setTargetId={setTargetId} effectiveOn={effectiveOn} setEffectiveOn={setEffectiveOn} reason={reason} setReason={setReason} groups={compatibleGroups} classifications={availableClassifications} plans={compatiblePlans} planAvailable={planAvailable} currentPeriodAction={currentPeriodAction} setCurrentPeriodAction={setCurrentPeriodAction} currentPeriodAmount={currentPeriodAmount} setCurrentPeriodAmount={setCurrentPeriodAmount} futureMode={futureMode} setFutureMode={setFutureMode} />}
             {step === "form" && mode === "reactivation" && <ReactivationForm enrollment={enrollment} groups={reactivationGroups} groupId={targetId} setGroupId={setTargetId} reactivatedOn={effectiveOn} setReactivatedOn={setEffectiveOn} economicStartOn={economicStartOn} setEconomicStartOn={setEconomicStartOn} isPartial={reactivationIsPartial} tuitionAgreement={reactivationTuitionAgreement} tuitionMode={initialTuitionMode} setTuitionMode={setInitialTuitionMode} tuitionAmount={initialTuitionAmount} setTuitionAmount={setInitialTuitionAmount} enrollmentFeeCoverage={enrollmentFeeCoverage} enrollmentFeeMode={enrollmentFeeMode} setEnrollmentFeeMode={setEnrollmentFeeMode} enrollmentFeeAmount={enrollmentFeeAmount} setEnrollmentFeeAmount={setEnrollmentFeeAmount} reason={reason} setReason={setReason} />}
             {step === "form" && mode === "discount" && <DiscountForm enrollment={enrollment} categories={discountCategories} categoryId={discountCategoryId} setCategoryId={setDiscountCategoryId} effectiveOn={effectiveOn} setEffectiveOn={setEffectiveOn} effectMode={discountEffectMode} setEffectMode={setDiscountEffectMode} currentPeriodAmount={discountCurrentPeriodAmount} setCurrentPeriodAmount={setDiscountCurrentPeriodAmount} selectedCategory={selectedDiscountCategory} selectedVersion={selectedDiscountVersion} preview={discountPreview} reason={reason} setReason={setReason} />}
+            {step === "form" && mode === "regularization" && <RegularizationForm enrollment={enrollment} economicStartOn={economicStartOn} setEconomicStartOn={setEconomicStartOn} amount={regularizationAmount} setAmount={setRegularizationAmount} dueDate={regularizationDueDate} setDueDate={setRegularizationDueDate} beforeFirstPeriod={regularizationBeforeFirstPeriod} isPartial={regularizationIsPartial} needsAmount={regularizationNeedsAmount} coveragePeriod={regularizationPeriod} reason={reason} setReason={setReason} />}
             {step === "review" && mode === "withdrawal" && <WithdrawalReview enrollment={enrollment} withdrawnOn={effectiveOn} currentPeriodAction={currentPeriodAction} currentPeriodAmount={currentPeriodAmount} futureMode={futureMode} reason={reason} />}
             {step === "review" && mode === "reactivation" && <ReactivationReview group={reactivationGroups.find((group) => group.id === targetId) ?? null} reactivatedOn={effectiveOn} economicStartOn={economicStartOn} isPartial={reactivationIsPartial} tuitionMode={initialTuitionMode} tuitionAmount={initialTuitionMode === "FULL" ? reactivationTuitionAgreement?.agreedAmount.toString() ?? "" : initialTuitionAmount} enrollmentFeeCoverage={enrollmentFeeCoverage} enrollmentFeeMode={enrollmentFeeMode} enrollmentFeeAmount={enrollmentFeeAmount} reason={reason} />}
             {step === "review" && mode === "discount" && selectedDiscountCategory && <DiscountReview enrollment={enrollment} category={selectedDiscountCategory} version={selectedDiscountVersion} preview={discountPreview} effectiveOn={effectiveOn} effectMode={discountEffectMode} currentPeriodAmount={discountCurrentPeriodAmount} reason={reason} />}
-            {step === "review" && mode && mode !== "withdrawal" && mode !== "reactivation" && mode !== "discount" && selectedTarget && <ActionReview mode={mode} enrollment={enrollment} target={selectedTarget} effectiveOn={effectiveOn} reason={reason} />}
+            {step === "review" && mode === "regularization" && <RegularizationReview enrollment={enrollment} economicStartOn={economicStartOn} amount={regularizationNeedsAmount ? regularizationAmount : ""} dueDate={regularizationBeforeFirstPeriod ? regularizationDueDate : regularizationPeriod?.dueDate ?? ""} beforeFirstPeriod={regularizationBeforeFirstPeriod} reason={reason} />}
+            {step === "review" && mode && mode !== "withdrawal" && mode !== "reactivation" && mode !== "discount" && mode !== "regularization" && selectedTarget && <ActionReview mode={mode} enrollment={enrollment} target={selectedTarget} effectiveOn={effectiveOn} reason={reason} />}
           </div>
 
           {error && <p className="border-t border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:px-6" role="alert">{error}</p>}
           <footer className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] sm:px-6">
             <Button variant="ghost" className="h-10" disabled={isPending} onClick={() => step === "review" ? setStep("form") : close()}>
-              <ChevronLeft /> Atrás
+              <ChevronLeft /> {mode === "regularization" && step === "form" ? "Cancelar" : "Atrás"}
             </Button>
             {step === "review" ? (
-              <Button className="h-10" disabled={isPending} onClick={submit}>{isPending && <LoaderCircle className="animate-spin" />}{isPending ? "Guardando..." : mode === "withdrawal" ? "Confirmar baja" : mode === "reactivation" ? "Confirmar reactivación" : mode === "discount" ? "Confirmar descuento" : "Confirmar cambio"}</Button>
+              <Button className="h-10" disabled={isPending} onClick={submit}>{isPending && <LoaderCircle className="animate-spin" />}{isPending ? "Guardando..." : mode === "withdrawal" ? "Confirmar baja" : mode === "reactivation" ? "Confirmar reactivación" : mode === "discount" ? "Confirmar descuento" : mode === "regularization" ? "Confirmar regularización" : "Confirmar cambio"}</Button>
             ) : (
-              <Button className="h-10" onClick={review}>Revisar</Button>
+              <Button className="h-10" disabled={isPending} onClick={mode === "regularization" ? submit : review}>{mode === "regularization" ? "Confirmar regularización" : "Revisar"}</Button>
             )}
           </footer>
         </Dialog.Popup>
@@ -614,6 +708,28 @@ function ReactivationReview({ group, reactivatedOn, economicStartOn, isPartial, 
   return <section className="space-y-5"><div><h2 className="text-lg font-semibold">Revisión de reactivación</h2><p className="mt-1 text-sm text-muted-foreground">Confirma la reactivación financiera y administrativa.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Fecha de reingreso" value={formatDate(reactivatedOn)} /><Summary label="Inicio económico" value={formatDate(economicStartOn)} /><Summary label="Grupo" value={group ? getEnrollmentGroupLabel(group) : "Sin grupo"} /><Summary label="Plan" value="12 pagos" /><Summary label="Primer periodo" value={tuition} /><Summary label="Inscripción" value={fee} /><Summary label="Motivo" value={reason} /></dl></section>
 }
 
+function RegularizationForm({ enrollment, economicStartOn, setEconomicStartOn, amount, setAmount, dueDate, setDueDate, beforeFirstPeriod, isPartial, needsAmount, coveragePeriod, reason, setReason }: {
+  enrollment: EnrollmentListItem
+  economicStartOn: string
+  setEconomicStartOn: (value: string) => void
+  amount: string
+  setAmount: (value: string) => void
+  dueDate: string
+  setDueDate: (value: string) => void
+  beforeFirstPeriod: boolean
+  isPartial: boolean
+  needsAmount: boolean
+  coveragePeriod: { year: number; month: number; dueDate: string } | null
+  reason: string
+  setReason: (value: string) => void
+}) {
+  return <section className="space-y-5"><div><h2 className="text-lg font-semibold">Regularizar inicio financiero</h2><p className="mt-1 text-sm text-muted-foreground">Ajusta el inicio económico de la matrícula activa.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Inicio actual" value={formatDate(enrollment.economicStartOn)} /><Summary label="Alumno" value={enrollment.student.fullName} /></dl><Field label="Nuevo inicio económico"><Input type="date" min={enrollment.enrolledOn > enrollment.cycle.startsOn ? enrollment.enrolledOn : enrollment.cycle.startsOn} max={enrollment.cycle.endsOn} value={economicStartOn} onChange={(event) => setEconomicStartOn(event.target.value)} /></Field>{needsAmount && <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4"><div><p className="text-sm font-medium">Periodo inicial</p><p className="mt-1 text-sm text-muted-foreground">{isPartial ? "Importe proporcional sobre la colegiatura individual vigente." : "Captura el importe del segmento inicial."}</p></div><Field label="Importe inicial"><Input inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" /></Field>{beforeFirstPeriod ? <div><Field label="Fecha de vencimiento"><Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></Field><p className="mt-1 text-xs text-muted-foreground">Define cuándo este cargo se considerará vencido.</p></div> : <p className="text-xs text-muted-foreground">Vencimiento institucional: {coveragePeriod?.dueDate ? formatDate(coveragePeriod.dueDate) : "Sin dato"}.</p>}</div>}<div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">Esta operación puede crear, ajustar o anular obligaciones de colegiatura. Los pagos existentes no se modifican.</div><Field label="Motivo"><Textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Explica el motivo de la regularización" rows={3} /></Field></section>
+}
+
+function RegularizationReview({ enrollment, economicStartOn, amount, dueDate, beforeFirstPeriod, reason }: { enrollment: EnrollmentListItem; economicStartOn: string; amount: string; dueDate: string; beforeFirstPeriod: boolean; reason: string }) {
+  return <section className="space-y-5"><div><h2 className="text-lg font-semibold">Revisar regularización</h2><p className="mt-1 text-sm text-muted-foreground">Confirma el cambio antes de aplicarlo.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Inicio actual" value={formatDate(enrollment.economicStartOn)} /><Summary label="Nuevo inicio" value={formatDate(economicStartOn)} /><Summary label="Periodo inicial" value={amount ? "Importe inicial" : "Sin importe inicial custom"} /><Summary label="Importe inicial" value={amount ? formatCurrency(Number(amount)) : "No aplica"} />{beforeFirstPeriod && <Summary label="Vencimiento" value={formatDate(dueDate)} />}<Summary label="Motivo" value={reason} /></dl></section>
+}
+
 function Choice({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
   return <label className="flex min-h-10 items-center gap-3 rounded-lg border border-border px-3 text-sm font-medium"><input type="radio" checked={checked} onChange={onChange} />{label}</label>
 }
@@ -627,7 +743,7 @@ function Summary({ label, value }: { label: string; value: string }) {
 }
 
 function actionLabel(mode: ActionMode) {
-  return mode === "plan" ? "Cambiar plan" : mode === "group" ? "Cambiar grupo" : mode === "classification" ? "Cambiar clasificación" : mode === "discount" ? "Asignar descuento" : mode === "withdrawal" ? "Dar de baja" : "Reactivar matrícula"
+  return mode === "plan" ? "Cambiar plan" : mode === "group" ? "Cambiar grupo" : mode === "classification" ? "Cambiar clasificación" : mode === "discount" ? "Asignar descuento" : mode === "withdrawal" ? "Dar de baja" : mode === "reactivation" ? "Reactivar matrícula" : "Regularizar inicio financiero"
 }
 
 function dateInput(date: Date) { return date.toISOString().slice(0, 10) }
