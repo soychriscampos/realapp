@@ -53,6 +53,9 @@ const moreNavigation = primaryNavigation.filter(
 )
 
 export function AdminShell({ children, roleLabel }: AdminShellProps) {
+  const pathname = usePathname()
+  const showDesktopSearch = pathname !== "/admin"
+
   return (
     <ToasterProvider>
       <div className="min-h-dvh bg-[#f7f7f8] text-foreground">
@@ -97,10 +100,15 @@ export function AdminShell({ children, roleLabel }: AdminShellProps) {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-14 items-center justify-end border-b border-border bg-white px-6">
-            <div className="flex w-full max-w-[1480px] items-center justify-between gap-4">
-              <div className="w-full max-w-sm">
-                <StudentQuickSearch compact />
-              </div>
+            <div className={cn(
+              "flex w-full max-w-[1480px] items-center gap-4",
+              showDesktopSearch ? "justify-between" : "justify-end"
+            )}>
+              {showDesktopSearch && (
+                <div className="w-full max-w-sm">
+                  <StudentQuickSearch compact />
+                </div>
+              )}
               <UserMenu roleLabel={roleLabel} compact />
             </div>
           </header>
@@ -340,8 +348,7 @@ export function QuickAction({
   return (
     <Button
       type="button"
-      variant="outline"
-      className="h-12 justify-start gap-3 bg-white px-3 text-sm"
+      className="h-10 min-w-44 justify-center gap-2 px-3 text-sm"
       onClick={() => {
         if (!searchTarget) return
         const target = Array.from(

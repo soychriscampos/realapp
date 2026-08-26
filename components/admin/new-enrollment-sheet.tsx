@@ -18,6 +18,7 @@ import type { TuitionDiscountCategory } from "@/lib/admin/discount-categories"
 import { searchStudents, type StudentSearchResult } from "@/lib/admin/students"
 import { createClient } from "@/lib/supabase/client"
 import { RegisterPaymentSheet } from "@/components/admin/register-payment-sheet"
+import { cn } from "@/lib/utils"
 
 type Cycle = { id: string; name: string; starts_on: string }
 type Grade = { id: string; name: string; education_level_id: string }
@@ -35,6 +36,8 @@ type NewEnrollmentSheetProps = {
   groups: Group[]
   classifications: Classification[]
   financialCoverage: EnrollmentFinancialCoverage[]
+  triggerLabel?: string
+  triggerClassName?: string
 }
 
 export function NewEnrollmentSheet({
@@ -45,6 +48,8 @@ export function NewEnrollmentSheet({
   groups,
   classifications,
   financialCoverage,
+  triggerLabel = "Nueva matrícula",
+  triggerClassName,
 }: NewEnrollmentSheetProps) {
   const today = dateInput(new Date())
   const [open, setOpen] = useState(false)
@@ -401,7 +406,7 @@ export function NewEnrollmentSheet({
       setOpen(nextOpen)
       if (!nextOpen) reset()
     }}>
-      <Dialog.Trigger render={<Button className="h-10"><Plus /> Nueva matrícula</Button>} />
+      <Dialog.Trigger render={<Button className={cn("h-10", triggerClassName)}><Plus /> {triggerLabel}</Button>} />
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/25" />
         <Dialog.Popup className="fixed inset-0 z-50 flex flex-col bg-white outline-none sm:left-auto sm:w-[72vw] sm:border-l sm:border-border sm:shadow-xl md:w-[68vw] lg:w-1/2">

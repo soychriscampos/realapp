@@ -1,147 +1,137 @@
 import { ChevronRight } from "lucide-react"
+import Link from "next/link"
 
 import { QuickAction } from "@/components/admin/admin-shell"
+import { AdminHomeRecentPayments } from "@/components/admin/admin-home-recent-payments"
+import { NewEnrollmentSheet } from "@/components/admin/new-enrollment-sheet"
 import { StudentQuickSearch } from "@/components/admin/student-quick-search"
-import {
-  attentionItems,
-  homeSummary,
-  recentPayments,
-} from "@/components/admin/admin-home-mocks"
+import { getAdminHomeData } from "@/lib/admin/admin-home"
+import { getEnrollmentFinancialCoverage } from "@/lib/admin/enrollments"
+import { formatCurrency } from "@/lib/admin/student-account"
 import { getStudentCatalogs } from "@/lib/admin/students"
-import { createClient } from "@/lib/supabase/server"
+import { requireRole } from "@/lib/auth/require-role"
 
 export default async function AdminPage() {
-  const supabase = await createClient()
-  const { catalogs } = await getStudentCatalogs(supabase)
+  const { supabase, userId, roles } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { catalogs, error: catalogsError } = await getStudentCatalogs(supabase)
+
+  if (catalogsError || !catalogs?.operationalCycle) return <AdminLoadError />
+
+  const cycle = catalogs.operationalCycle
+  const [groupsResult, financialCoverageResult, home] = await Promise.all([
+    supabase
+      .from("groups")
+      .select("id, name, code, cycle_id, grade_level_id")
+      .eq("is_active", true)
+      .order("name"),
+    getEnrollmentFinancialCoverage(supabase),
+    getAdminHomeData(supabase, userId, roles.includes("MASTER"), {
+      id: cycle.id,
+    }),
+  ])
+
+  if (groupsResult.error || financialCoverageResult.error) return <AdminLoadError />
+
+  const isMaster = roles.includes("MASTER")
 
   return (
     <div className="space-y-7">
-      <header className="space-y-1">
-        <p className="text-sm text-muted-foreground lg:hidden">
-          Ciclo 2026-2027
-        </p>
-        <h1 className="text-[22px] font-semibold tracking-tight sm:text-2xl">
-          Inicio
-        </h1>
-        <p className="hidden text-sm text-muted-foreground lg:block">
-          Ciclo 2026-2027
-        </p>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-[22px] font-semibold tracking-tight sm:text-2xl">Inicio</h1>
+          <p className="text-sm text-muted-foreground">{cycle.name}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <QuickAction icon="payment" label="Registrar pago" searchTarget="register-payment" />
+          <NewEnrollmentSheet
+            cycles={catalogs.cycles}
+            operationalCycleId={cycle.id}
+            levels={catalogs.levels}
+            grades={catalogs.grades}
+            groups={groupsResult.data ?? []}
+            classifications={catalogs.classifications}
+            financialCoverage={financialCoverageResult.data}
+            triggerLabel="Registrar alumno"
+            triggerClassName="min-w-44"
+          />
+        </div>
       </header>
 
       <section aria-labelledby="student-search" className="space-y-3">
-        <h2 id="student-search" className="text-base font-semibold">
-          Buscar alumno
-        </h2>
-        <StudentQuickSearch
-          cycleId={catalogs?.operationalCycle?.id}
-          focusTarget="register-payment"
-        />
+        <h2 id="student-search" className="text-base font-semibold">Buscar alumno</h2>
+        <StudentQuickSearch cycleId={cycle.id} focusTarget="register-payment" />
       </section>
 
-      <section aria-labelledby="quick-actions" className="space-y-3">
-        <h2 id="quick-actions" className="text-base font-semibold">
-          Acciones rápidas
-        </h2>
-        <div className="grid gap-2 sm:grid-cols-3 lg:max-w-3xl">
-          <QuickAction
-            icon="payment"
-            label="Registrar pago"
-            searchTarget="register-payment"
-          />
-          <QuickAction icon="enrollment" label="Nueva preinscripción" />
-          <QuickAction icon="student" label="Buscar alumno" />
-        </div>
-      </section>
+      {home.hasError && (
+        <p className="rounded-lg border border-border bg-white px-4 py-3 text-sm text-muted-foreground">
+          No pudimos actualizar algunos datos del inicio. Intenta recargar la página.
+        </p>
+      )}
 
       <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-7">
           <section aria-labelledby="attention" className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <h2 id="attention" className="text-base font-semibold">
-                Requieren atención
-              </h2>
-              <button className="min-h-9 rounded-lg px-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
-                Ver todos
-              </button>
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-border bg-white">
-              {attentionItems.map((item, index) => (
-                <button
-                  key={item.student}
-                  className="flex min-h-[72px] w-full items-center justify-between gap-4 border-b border-border px-4 py-3 text-left transition last:border-b-0 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">
-                      {item.student}
+            <h2 id="attention" className="text-base font-semibold">Requieren atención</h2>
+            {home.overdueItems.length === 0 ? (
+              <div className="rounded-xl border border-border bg-white px-4 py-8 text-center text-sm text-muted-foreground">
+                No hay alumnos con saldo vencido en este ciclo.
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-border bg-white">
+                {home.overdueItems.map((item) => (
+                  <Link
+                    key={item.studentId}
+                    href={`/admin/alumnos/${item.studentId}`}
+                    className="flex min-h-[72px] items-center justify-between gap-4 border-b border-border px-4 py-3 text-left transition last:border-b-0 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">{item.studentName}</span>
+                      <span className="mt-1 block truncate text-sm text-muted-foreground">
+                        {item.gradeName}{item.groupName ? ` · ${item.groupName}` : ""}
+                      </span>
                     </span>
-                    <span className="mt-1 block truncate text-sm text-muted-foreground">
-                      {item.grade}
+                    <span className="flex shrink-0 items-center gap-3 text-sm font-medium text-destructive">
+                      {formatCurrency(item.overdueAmount)} vencido
+                      <ChevronRight className="size-4 text-muted-foreground" />
                     </span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-3 text-sm font-medium">
-                    <span
-                      className={
-                        index === 2
-                          ? "text-amber-700"
-                          : "text-destructive"
-                      }
-                    >
-                      {item.status}
-                    </span>
-                    <ChevronRight className="size-4 text-muted-foreground" />
-                  </span>
-                </button>
-              ))}
-            </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </section>
 
           <section aria-labelledby="recent-payments" className="space-y-3">
-            <h2 id="recent-payments" className="text-base font-semibold">
-              Pagos recientes
-            </h2>
-
-            <div className="overflow-hidden rounded-xl border border-border bg-white">
-              {recentPayments.map((payment) => (
-                <button
-                  key={`${payment.student}-${payment.time}`}
-                  className="flex min-h-[68px] w-full items-center justify-between gap-4 border-b border-border px-4 py-3 text-left transition last:border-b-0 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">
-                      {payment.student}
-                    </span>
-                    <span className="mt-1 block truncate text-sm text-muted-foreground">
-                      {payment.amount} · {payment.method}
-                    </span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-3 text-sm text-muted-foreground">
-                    {payment.time}
-                    <ChevronRight className="size-4" />
-                  </span>
-                </button>
-              ))}
-            </div>
+            <h2 id="recent-payments" className="text-base font-semibold">Pagos recientes</h2>
+            <AdminHomeRecentPayments payments={home.recentPayments} isMaster={isMaster} />
           </section>
         </div>
 
         <aside aria-label="Resumen del día" className="space-y-3">
           <h2 className="text-base font-semibold">Hoy</h2>
           <div className="rounded-xl border border-border bg-white">
-            {homeSummary.map((item) => (
-              <div
-                key={item.label}
-                className="border-b border-border px-4 py-4 last:border-b-0"
-              >
-                <p className="text-sm text-muted-foreground">{item.label}</p>
-                <p className="mt-1 text-2xl font-semibold tracking-tight">
-                  {item.value}
-                </p>
-              </div>
-            ))}
+            <SummaryItem label="Pagos del día" value={formatCurrency(home.paymentsToday)} />
+            <SummaryItem label="Saldo vencido del ciclo" value={formatCurrency(home.overdueTotal)} />
+            <SummaryItem label="Alumnos pendientes" value={String(home.pendingStudents)} />
           </div>
         </aside>
       </div>
+    </div>
+  )
+}
+
+function SummaryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-b border-border px-4 py-4 last:border-b-0">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
+    </div>
+  )
+}
+
+function AdminLoadError() {
+  return (
+    <div className="rounded-xl border border-border bg-white px-4 py-8 text-center text-sm text-muted-foreground">
+      No pudimos cargar el inicio administrativo. Intenta recargar la página.
     </div>
   )
 }

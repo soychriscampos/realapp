@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useMemo, useRef, useState, useTransition } from "react"
+import { type ReactNode, useMemo, useRef, useState, useTransition } from "react"
 
 import {
   correctPaymentAllocations,
@@ -36,6 +36,7 @@ type PaymentDetailsSheetProps = {
   charges: StudentChargeBalance[]
   canManage: boolean
   triggerClassName?: string
+  triggerLabel?: ReactNode
 }
 
 type View = "detail" | "metadata" | "allocations" | "reverse"
@@ -47,6 +48,7 @@ export function PaymentDetailsSheet({
   charges,
   canManage,
   triggerClassName,
+  triggerLabel = "Ver detalle",
 }: PaymentDetailsSheetProps) {
   const toastManager = Toast.useToastManager()
   const router = useRouter()
@@ -90,7 +92,7 @@ export function PaymentDetailsSheet({
           triggerClassName
         )}
       >
-        Ver detalle
+        {triggerLabel}
       </Dialog.Trigger>
 
       <Dialog.Portal>
