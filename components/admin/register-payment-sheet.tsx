@@ -10,7 +10,9 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleAlert,
+  Download,
   LoaderCircle,
+  Mail,
   X,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -18,6 +20,7 @@ import { useMemo, useRef, useState, useTransition } from "react"
 
 import {
   registerPayment,
+  sendPaymentReceiptEmail,
   type RegisterPaymentInput,
 } from "@/app/admin/alumnos/[id]/payment-actions"
 import { Button } from "@/components/ui/button"
@@ -85,6 +88,7 @@ export function RegisterPaymentSheet({
   const router = useRouter()
   const toastManager = Toast.useToastManager()
   const submittingRef = useRef(false)
+  const receiptSendingRef = useRef(false)
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const [step, setStep] = useState<Step>("form")
   const [amount, setAmount] = useState("")
@@ -98,6 +102,8 @@ export function RegisterPaymentSheet({
   const [overrideReason, setOverrideReason] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<PaymentSnapshot | null>(null)
+  const [paymentId, setPaymentId] = useState<string | null>(null)
+  const [isSendingReceipt, setIsSendingReceipt] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const pendingCharges = useMemo(
@@ -133,7 +139,7 @@ export function RegisterPaymentSheet({
   }
 
   function handleOpenChange(nextOpen: boolean) {
-    if (!nextOpen && isPending) return
+    if (!nextOpen && (isPending || isSendingReceipt)) return
     if (controlledOpen === undefined) setUncontrolledOpen(nextOpen)
     onOpenChange?.(nextOpen)
     if (!nextOpen) resetForm()
@@ -152,7 +158,10 @@ export function RegisterPaymentSheet({
     setOverrideReason("")
     setError(null)
     setSnapshot(null)
+    setPaymentId(null)
+    setIsSendingReceipt(false)
     submittingRef.current = false
+    receiptSendingRef.current = false
   }
 
   function reviewPayment() {
@@ -252,12 +261,37 @@ export function RegisterPaymentSheet({
       }
 
       setStep("success")
+      setPaymentId(result.paymentId)
       onPaymentRegistered?.(result.paymentId)
       toastManager.add({
         title: "Pago registrado",
         description: `${student.fullName} · ${formatCents(snapshot.amountCents)}`,
       })
       router.refresh()
+    })
+  }
+
+  function sendReceipt() {
+    if (!paymentId || receiptSendingRef.current) return
+
+    receiptSendingRef.current = true
+    setIsSendingReceipt(true)
+    startTransition(async () => {
+      const result = await sendPaymentReceiptEmail(student.id, paymentId)
+      receiptSendingRef.current = false
+      setIsSendingReceipt(false)
+
+      if (result.ok) {
+        toastManager.add({ title: "Comprobante enviado por correo." })
+        return
+      }
+
+      if (result.reason === "NO_RECIPIENTS") {
+        toastManager.add({ title: "No hay un correo habilitado para este alumno." })
+        return
+      }
+
+      toastManager.add({ title: "No fue posible enviar el comprobante." })
     })
   }
 
@@ -339,7 +373,13 @@ export function RegisterPaymentSheet({
             )}
 
             {step === "success" && snapshot && (
-              <PaymentSuccess studentName={student.fullName} snapshot={snapshot} />
+              <PaymentSuccess
+                student={student}
+                paymentId={paymentId}
+                snapshot={snapshot}
+                isSendingReceipt={isSendingReceipt}
+                onSendReceipt={sendReceipt}
+              />
             )}
           </div>
 
@@ -572,14 +612,26 @@ function PaymentReview({ studentName, snapshot, error }: { studentName: string; 
   )
 }
 
-function PaymentSuccess({ studentName, snapshot }: { studentName: string; snapshot: PaymentSnapshot }) {
+function PaymentSuccess({
+  student,
+  paymentId,
+  snapshot,
+  isSendingReceipt,
+  onSendReceipt,
+}: {
+  student: RegisterPaymentSheetProps["student"]
+  paymentId: string | null
+  snapshot: PaymentSnapshot
+  isSendingReceipt: boolean
+  onSendReceipt: () => void
+}) {
   return (
     <div className="space-y-7 px-4 py-8 sm:px-6">
       <div className="flex items-start gap-3">
         <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-emerald-700" />
         <div>
           <h3 className="text-lg font-semibold">El pago quedó registrado</h3>
-          <p className="mt-1 text-sm text-muted-foreground">{studentName}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{student.fullName}</p>
         </div>
       </div>
       <dl className="grid gap-4 border-y border-border py-5 sm:grid-cols-2">
@@ -590,6 +642,30 @@ function PaymentSuccess({ studentName, snapshot }: { studentName: string; snapsh
         {snapshot.creditCents > 0 && <ReviewItem label="Saldo a favor generado" value={formatCents(snapshot.creditCents)} emphasis />}
       </dl>
       <p className="text-sm text-muted-foreground">El estado de cuenta se actualizó con la operación confirmada.</p>
+      {paymentId && (
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-full sm:w-auto"
+            nativeButton={false}
+            render={<a href={`/admin/alumnos/${student.id}/pagos/${paymentId}/recibo`} />}
+          >
+            <Download />
+            Descargar recibo
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-full sm:w-auto"
+            disabled={isSendingReceipt}
+            onClick={onSendReceipt}
+          >
+            {isSendingReceipt ? <LoaderCircle className="animate-spin" /> : <Mail />}
+            {isSendingReceipt ? "Enviando..." : "Enviar por correo"}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

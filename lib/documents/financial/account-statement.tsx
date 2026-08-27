@@ -7,7 +7,6 @@ import {
 
 import type {
   StudentAccountMovement,
-  StudentAccountSummary,
   StudentChargeBalance,
 } from "@/lib/admin/student-account"
 import type { StudentDetail } from "@/lib/admin/students"
@@ -19,61 +18,41 @@ type AccountStatementStudent = Pick<StudentDetail, "fullName" | "studentCode"> &
   enrollment: Pick<NonNullable<StudentDetail["enrollment"]>, "cycle" | "educationLevel" | "gradeLevel" | "group"> | null
 }
 
-type AccountStatementCharge = Pick<
+export type AccountStatementCharge = Pick<
   StudentChargeBalance,
   | "id"
   | "cycleId"
   | "cycleCode"
+  | "conceptCode"
   | "conceptName"
+  | "coverageYear"
+  | "coverageMonth"
   | "dueDate"
-  | "effectiveAmount"
-  | "totalApplied"
   | "outstandingAmount"
-  | "isPaid"
-  | "isOverdue"
->
+> & { paidAmount: string }
 
-type AccountStatementMovement = Pick<
+export type AccountStatementMovement = Pick<
   StudentAccountMovement,
   | "movementOn"
-  | "id"
-  | "parentId"
+  | "recordedAt"
   | "description"
-  | "movementType"
-  | "receivedByNameSnapshot"
   | "debit"
   | "credit"
-  | "status"
->
+> & { cycleCode: string }
 
 export type AccountStatementPdfData = {
   student: AccountStatementStudent
   generatedAt: string | Date
-  summary: StudentAccountSummary
+  currentCycleId: string | null
+  status: "AL CORRIENTE" | "ADEUDO"
+  pendingAmount: string | null
   charges: AccountStatementCharge[]
   movements: AccountStatementMovement[]
 }
 
 export function AccountStatementDocument({ data }: { data: AccountStatementPdfData }) {
-  const cutoff = dateKey(data.generatedAt)
-  const currentCycleId = data.student.enrollment?.cycle.id ?? null
-  const relevantCycleIds = getRelevantCycleIds(data.charges, currentCycleId, cutoff)
-  const charges = data.charges.filter(
-    (charge) => relevantCycleIds.has(charge.cycleId) && dateKey(charge.dueDate) <= cutoff
-  )
-  const chargeIds = new Set(charges.map((charge) => charge.id))
-  const movements = data.movements.filter(
-    (movement) =>
-      movement.status !== "VOID" &&
-      dateKey(movement.movementOn) <= cutoff &&
-      isMovementRelevantToCharges(movement, chargeIds)
-  )
-  const previousCycleCodes = Array.from(
-    new Set(charges
-      .filter((charge) => charge.cycleId !== currentCycleId)
-      .map((charge) => charge.cycleCode)
-      .filter(Boolean))
-  )
+  const currentCharges = data.charges.filter((charge) => charge.cycleId === data.currentCycleId)
+  const previousCharges = data.charges.filter((charge) => charge.cycleId !== data.currentCycleId)
 
   return (
     <Document title="Estado de cuenta">
@@ -100,53 +79,44 @@ export function AccountStatementDocument({ data }: { data: AccountStatementPdfDa
           <Text>Grado: {data.student.enrollment?.gradeLevel.name ?? ""}</Text>
           <Text>Grupo: {data.student.enrollment?.group?.code ?? ""}</Text>
         </View>
-        {previousCycleCodes.length ? (
-          <Text style={styles.muted}>Ciclos anteriores con adeudo: {previousCycleCodes.join(", ")}</Text>
-        ) : null}
+        <Text style={styles.status}>ESTADO: {data.status}</Text>
 
         <Text style={styles.sectionTitle}>Resumen financiero</Text>
-        <View style={styles.summaryGrid}>
-          <SummaryItem label="Saldo" value={data.summary.overdueTotal} />
-          <SummaryItem label="Saldo a favor" value={data.summary.availableCredit} />
-        </View>
-
-        <Text style={styles.sectionTitle}>Cargos</Text>
-        <View style={styles.table}>
-          <View style={[styles.tableRow, styles.tableHeader]}>
-            <Text style={styles.chargeConcept}>Concepto</Text>
-            <Text style={styles.chargeCycle}>Ciclo</Text>
-            <Text style={styles.chargeDate}>Vencimiento</Text>
-            <Text style={styles.amount}>Importe</Text>
-            <Text style={styles.amount}>Pendiente</Text>
+        {data.pendingAmount !== null ? (
+          <View style={styles.summaryGrid}>
+            <SummaryItem label="PENDIENTE DE PAGO" value={data.pendingAmount} />
           </View>
-          {charges.map((charge, index) => (
-            <View key={`${charge.cycleCode}-${charge.conceptName}-${charge.dueDate}-${index}`} style={styles.tableRow}>
-              <Text style={styles.chargeConcept}>{charge.conceptName}</Text>
-              <Text style={styles.chargeCycle}>{charge.cycleCode}</Text>
-              <Text style={styles.chargeDate}>{formatDate(charge.dueDate)}</Text>
-              <Text style={styles.amount}>{formatCurrencyMXN(Number(charge.effectiveAmount))}</Text>
-              <Text style={styles.amount}>{formatCurrencyMXN(Number(charge.outstandingAmount))}</Text>
-            </View>
-          ))}
-        </View>
+        ) : null}
 
-        <Text style={styles.sectionTitle}>Movimientos</Text>
-        <View style={styles.table}>
-          <View style={[styles.tableRow, styles.tableHeader]}>
-            <Text style={styles.movementDate}>Fecha</Text>
-            <Text style={styles.movementDescription}>Descripción</Text>
-            <Text style={styles.amount}>Cargo</Text>
-            <Text style={styles.amount}>Abono</Text>
-          </View>
-          {movements.map((movement, index) => (
-            <View key={`${movement.movementOn}-${movement.description}-${index}`} style={styles.tableRow}>
-              <Text style={styles.movementDate}>{formatDate(movement.movementOn)}</Text>
-              <Text style={styles.movementDescription}>{movement.description}</Text>
-              <Text style={styles.amount}>{formatCurrencyMXN(Number(movement.debit))}</Text>
-              <Text style={styles.amount}>{formatCurrencyMXN(Number(movement.credit))}</Text>
+        <Text style={styles.sectionTitle}>Conceptos del ciclo actual</Text>
+        <ChargeTable charges={currentCharges} />
+
+        {previousCharges.length ? (
+          <>
+            <Text style={styles.sectionTitle}>Adeudos de ciclos anteriores</Text>
+            <ChargeTable charges={previousCharges} />
+          </>
+        ) : null}
+
+        <Text style={styles.sectionTitle}>Historial de pagos</Text>
+        {data.movements.length ? (
+          <View style={styles.table}>
+            <View style={[styles.tableRow, styles.tableHeader]}>
+              <Text style={styles.movementDate}>Fecha</Text>
+              <Text style={styles.movementDescription}>Descripción</Text>
+              <Text style={styles.amount}>Abono</Text>
             </View>
-          ))}
-        </View>
+            {data.movements.map((movement, index) => (
+              <View key={`${movement.movementOn}-${movement.description}-${index}`} style={styles.tableRow}>
+                <Text style={styles.movementDate}>{formatDate(movement.movementOn)}</Text>
+                <Text style={styles.movementDescription}>{movement.description}</Text>
+                <Text style={styles.amount}>{formatCurrencyMXN(Number(movement.credit))}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyState}>Aún no hay pagos registrados para este alumno.</Text>
+        )}
 
         <FinancialDocumentFooter />
       </Page>
@@ -158,45 +128,45 @@ export function generateAccountStatementPdf(data: AccountStatementPdfData): Prom
   return renderFinancialPdf(<AccountStatementDocument data={data} />)
 }
 
-function getRelevantCycleIds(
-  charges: AccountStatementCharge[],
-  currentCycleId: string | null,
-  cutoff: string
-) {
-  const cycleIds = new Set<string>()
-  if (currentCycleId) cycleIds.add(currentCycleId)
-
-  for (const charge of charges) {
-    if (
-      charge.cycleId !== currentCycleId &&
-      dateKey(charge.dueDate) <= cutoff &&
-      Number(charge.outstandingAmount) > 0
-    ) {
-      cycleIds.add(charge.cycleId)
-    }
-  }
-
-  return cycleIds
+function ChargeTable({ charges }: { charges: AccountStatementCharge[] }) {
+  return (
+    <View style={styles.table}>
+      <View style={[styles.tableRow, styles.tableHeader]}>
+        <Text style={styles.chargeConcept}>Concepto</Text>
+        <Text style={styles.chargeCycle}>Ciclo</Text>
+        <Text style={styles.chargeDate}>Vencimiento</Text>
+        <Text style={styles.amount}>Pagado</Text>
+        <Text style={styles.amount}>Pendiente</Text>
+      </View>
+      {charges.map((charge, index) => (
+        <View key={`${charge.cycleCode}-${charge.conceptName}-${charge.dueDate}-${index}`} style={styles.tableRow}>
+          <View style={styles.chargeConcept}>
+            {chargeLabel(charge).period ? <Text style={styles.chargePeriod}>{chargeLabel(charge).period}</Text> : null}
+            <Text>{chargeLabel(charge).name}</Text>
+          </View>
+          <Text style={styles.chargeCycle}>{charge.cycleCode}</Text>
+          <Text style={styles.chargeDate}>{formatDate(charge.dueDate)}</Text>
+          <Text style={styles.amount}>{formatCurrencyMXN(Number(charge.paidAmount))}</Text>
+          <Text style={styles.amount}>{formatCurrencyMXN(Number(charge.outstandingAmount))}</Text>
+        </View>
+      ))}
+    </View>
+  )
 }
 
-function isMovementRelevantToCharges(
-  movement: AccountStatementMovement,
-  chargeIds: Set<string>
-) {
-  if (movement.movementType === "CHARGE") return chargeIds.has(movement.id)
-  if (movement.parentId) return chargeIds.has(movement.parentId)
-  return true
-}
-
-function dateKey(value: string | Date) {
-  if (value instanceof Date) {
-    const year = value.getFullYear()
-    const month = String(value.getMonth() + 1).padStart(2, "0")
-    const day = String(value.getDate()).padStart(2, "0")
-    return `${year}-${month}-${day}`
+function chargeLabel(charge: AccountStatementCharge) {
+  if (
+    charge.conceptCode === "TUITION" &&
+    charge.coverageYear &&
+    charge.coverageMonth &&
+    charge.coverageMonth >= 1 &&
+    charge.coverageMonth <= 12
+  ) {
+    const month = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"][charge.coverageMonth - 1]
+    return { period: `${month} ${String(charge.coverageYear).slice(-2)}`, name: charge.conceptName }
   }
 
-  return value.slice(0, 10)
+  return { period: null, name: charge.conceptName }
 }
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
@@ -222,6 +192,11 @@ const styles = {
     fontSize: 8,
     color: "#68737d",
     textTransform: "uppercase" as const,
+  },
+  status: {
+    marginTop: 8,
+    fontSize: 10,
+    fontWeight: 700,
   },
   value: {
     fontSize: 11,
@@ -289,4 +264,12 @@ const styles = {
   amount: { width: "21.5%", textAlign: "right" as const },
   movementDate: { width: "16%" },
   movementDescription: { width: "34%" },
+  chargePeriod: { fontWeight: 700 },
+  emptyState: {
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "#d9dee5",
+    fontSize: 9,
+    color: "#68737d",
+  },
 }

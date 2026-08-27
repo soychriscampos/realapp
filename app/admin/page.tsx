@@ -71,7 +71,15 @@ export default async function AdminPage() {
       <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-7">
           <section aria-labelledby="attention" className="space-y-3">
-            <h2 id="attention" className="text-base font-semibold">Requieren atención</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 id="attention" className="text-base font-semibold">Requieren atención</h2>
+              <Link
+                href="/admin/alumnos/adeudos"
+                className="min-h-9 rounded-lg px-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                Ver todos
+              </Link>
+            </div>
             {home.overdueItems.length === 0 ? (
               <div className="rounded-xl border border-border bg-white px-4 py-8 text-center text-sm text-muted-foreground">
                 No hay alumnos con saldo vencido en este ciclo.

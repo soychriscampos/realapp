@@ -15,10 +15,14 @@ import { requireRole } from "@/lib/auth/require-role"
 
 type StudentDetailPageProps = {
   params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
-export default async function StudentDetailPage({ params }: StudentDetailPageProps) {
+export default async function StudentDetailPage({ params, searchParams }: StudentDetailPageProps) {
   const { id } = await params
+  const query = await searchParams
+  const returnTo = validReturnTo(query.returnTo)
+  const accountHref = studentAccountHref(id, returnTo)
   const { roles, supabase, userId } = await requireRole(["MASTER", "ADMINISTRATIVO"])
   const { catalogs, error: catalogsError } = await getStudentCatalogs(supabase)
 
@@ -48,7 +52,7 @@ export default async function StudentDetailPage({ params }: StudentDetailPagePro
     <div className="space-y-7">
       <header className="space-y-4">
         <Link
-          href="/admin/alumnos"
+          href={returnTo}
           className="inline-flex min-h-9 items-center gap-1 rounded-lg px-1 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <ChevronLeft className="size-4" />
@@ -90,7 +94,7 @@ export default async function StudentDetailPage({ params }: StudentDetailPagePro
         <div className="flex min-w-max gap-5">
           <span className="border-b-2 border-foreground px-1 pb-3 text-sm font-medium">Resumen</span>
           <Link
-            href={`/admin/alumnos/${student.id}/cuenta`}
+            href={accountHref}
             className="px-1 pb-3 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
             Cuenta
@@ -110,7 +114,7 @@ export default async function StudentDetailPage({ params }: StudentDetailPagePro
               <div className="space-y-4">
                 <AccountSummary summary={accountSummaryResult.data} compact />
                 <Link
-                  href={`/admin/alumnos/${student.id}/cuenta`}
+                  href={accountHref}
                   className="inline-flex min-h-9 items-center text-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   Ver estado de cuenta
@@ -178,6 +182,19 @@ export default async function StudentDetailPage({ params }: StudentDetailPagePro
       </div>
     </div>
   )
+}
+
+function validReturnTo(value: string | string[] | undefined) {
+  if (typeof value !== "string" || !value.startsWith("/admin/alumnos")) {
+    return "/admin/alumnos"
+  }
+
+  return value
+}
+
+function studentAccountHref(studentId: string, returnTo: string) {
+  if (returnTo === "/admin/alumnos") return `/admin/alumnos/${studentId}/cuenta`
+  return `/admin/alumnos/${studentId}/cuenta?returnTo=${encodeURIComponent(returnTo)}`
 }
 
 function paymentUnavailableReason(

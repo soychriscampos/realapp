@@ -2,6 +2,11 @@
 
 import { revalidatePath } from "next/cache"
 
+import { getStudentChargeBalances, getStudentPaymentDetails } from "@/lib/admin/student-account"
+import { getStudentDetail } from "@/lib/admin/students"
+import { generatePaymentReceiptPdf, type PaymentReceiptPdfData } from "@/lib/documents/financial/payment-receipt"
+import { getStudentEmailRecipients } from "@/lib/email/recipients"
+import { resend } from "@/lib/email/resend"
 import { requireRole } from "@/lib/auth/require-role"
 
 export type RegisterPaymentInput = {
@@ -44,6 +49,103 @@ export type ReversePaymentInput = {
 export type PaymentManagementResult =
   | { ok: true }
   | { ok: false; message: string; refreshAccount?: boolean }
+
+export type SendPaymentReceiptEmailResult =
+  | { ok: true; recipientCount: number }
+  | { ok: false; reason: "NO_RECIPIENTS" | "CONFIGURATION" | "ERROR"; message: string }
+
+export async function sendPaymentReceiptEmail(
+  studentId: string,
+  paymentId: string
+): Promise<SendPaymentReceiptEmailResult> {
+  if (!studentId || !paymentId) {
+    return { ok: false, reason: "ERROR", message: "No fue posible enviar el comprobante." }
+  }
+
+  const from = process.env.RESEND_FROM_EMAIL?.trim()
+  if (!from) {
+    return { ok: false, reason: "CONFIGURATION", message: "El correo no está configurado." }
+  }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+
+  try {
+    const [{ data: student, error: studentError }, paymentResult, chargesResult, recipientsResult] = await Promise.all([
+      getStudentDetail(supabase, studentId, undefined),
+      getStudentPaymentDetails(supabase, studentId, [paymentId]),
+      getStudentChargeBalances(supabase, studentId),
+      getStudentEmailRecipients(supabase, studentId),
+    ])
+
+    if (studentError || recipientsResult.error) {
+      return { ok: false, reason: "ERROR", message: "No fue posible preparar el envío." }
+    }
+
+    if (!student) {
+      return { ok: false, reason: "ERROR", message: "Alumno no encontrado." }
+    }
+
+    if (paymentResult.error) {
+      return { ok: false, reason: "ERROR", message: "No fue posible obtener el pago." }
+    }
+
+    if (chargesResult.error) {
+      return { ok: false, reason: "ERROR", message: "No fue posible obtener las aplicaciones del pago." }
+    }
+
+    const payment = paymentResult.data.find((item) => item.id === paymentId)
+    if (!payment) {
+      return { ok: false, reason: "ERROR", message: "Pago no encontrado." }
+    }
+
+    if (!recipientsResult.data.length) {
+      return { ok: false, reason: "NO_RECIPIENTS", message: "No hay correos disponibles para este alumno." }
+    }
+
+    const chargeById = new Map(chargesResult.data.map((charge) => [charge.id, charge]))
+    const data: PaymentReceiptPdfData = {
+      student: {
+        fullName: student.fullName,
+        studentCode: student.studentCode,
+      },
+      payment: {
+        ...payment,
+        allocations: payment.allocations.map((allocation) => {
+          const charge = chargeById.get(allocation.chargeId)
+          return {
+            conceptName: charge?.conceptName ?? "Cargo no disponible",
+            cycleCode: charge?.cycleCode ?? "",
+            amount: allocation.amount,
+          }
+        }),
+      },
+    }
+
+    const pdf = await generatePaymentReceiptPdf(data)
+    const filename = `recibo-pago-${safeFilename(student.fullName)}-${safeFilename(paymentId).slice(0, 8)}.pdf`
+    const { error } = await resend.emails.send({
+      from,
+      to: recipientsResult.data.map((recipient) => recipient.email),
+      subject: `Comprobante de pago — ${student.fullName}`,
+      text: `Se adjunta el comprobante del pago realizado para el alumno ${student.fullName}.`,
+      attachments: [{
+        filename,
+        content: pdf,
+        contentType: "application/pdf",
+      }],
+    })
+
+    if (error) {
+      console.error("send_payment_receipt_email failed", { message: error.message, studentId, paymentId })
+      return { ok: false, reason: "ERROR", message: "No fue posible enviar el comprobante." }
+    }
+
+    return { ok: true, recipientCount: recipientsResult.data.length }
+  } catch (error) {
+    console.error("send_payment_receipt_email failed", { error, studentId, paymentId })
+    return { ok: false, reason: "ERROR", message: "No fue posible enviar el comprobante." }
+  }
+}
 
 export async function registerPayment(
   input: RegisterPaymentInput
@@ -271,4 +373,15 @@ function mapPaymentManagementError(
     : "No pudimos guardar la corrección. Inténtalo de nuevo."
 
   return { ok: false, message: fallback }
+}
+
+function safeFilename(value: string) {
+  const normalized = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase()
+
+  return normalized || "alumno"
 }

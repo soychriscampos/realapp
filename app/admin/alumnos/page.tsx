@@ -45,11 +45,19 @@ export default async function StudentsPage({ searchParams }: StudentsPageProps) 
   return (
     <div className="space-y-6">
       <header className="space-y-4">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight sm:text-2xl">Alumnos</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Consulta y abre el contexto actual de cada alumno.
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-[22px] font-semibold tracking-tight sm:text-2xl">Alumnos</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Consulta y abre el contexto actual de cada alumno.
+            </p>
+          </div>
+          <Link
+            href="/admin/alumnos/adeudos"
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-border bg-white px-3 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            Con adeudo
+          </Link>
         </div>
         <StudentListSearch key={values.query ?? ""} initialValue={values.query ?? ""} />
       </header>

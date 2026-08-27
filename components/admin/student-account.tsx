@@ -44,11 +44,6 @@ export function AccountSummary({
               {formatCurrency(summary.overdueTotal)}
             </p>
           </div>
-          {amountNumber(summary.overdueTotal) > 0 && (
-            <p className="shrink-0 text-sm font-medium text-destructive tabular-nums">
-              {formatCurrency(summary.overdueTotal)} vencido
-            </p>
-          )}
         </div>
         {amountNumber(summary.availableCredit) > 0 && (
           <p className="text-sm font-medium text-emerald-700">
@@ -71,18 +66,15 @@ export function AccountSummary({
         <FinancialStatus summary={summary} />
       </div>
 
-      <dl className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
-        <AccountMetric
-          label="Vencido"
-          value={formatCurrency(summary.overdueTotal)}
-          valueClassName={amountNumber(summary.overdueTotal) > 0 ? "text-destructive" : undefined}
-        />
-        <AccountMetric
-          label="Saldo a favor"
-          value={formatCurrency(summary.availableCredit)}
-          valueClassName={amountNumber(summary.availableCredit) > 0 ? "text-emerald-700" : undefined}
-        />
-      </dl>
+      {amountNumber(summary.availableCredit) > 0 && (
+        <dl className="border-t border-border pt-4">
+          <AccountMetric
+            label="Saldo a favor"
+            value={formatCurrency(summary.availableCredit)}
+            valueClassName="text-emerald-700"
+          />
+        </dl>
+      )}
     </div>
   )
 }

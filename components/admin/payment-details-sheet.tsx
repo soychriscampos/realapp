@@ -5,8 +5,10 @@ import { Toast } from "@base-ui/react/toast"
 import {
   ArrowLeft,
   CircleAlert,
+  Download,
   FilePenLine,
   LoaderCircle,
+  Mail,
   RotateCcw,
   SlidersHorizontal,
   X,
@@ -17,6 +19,7 @@ import { type ReactNode, useMemo, useRef, useState, useTransition } from "react"
 import {
   correctPaymentAllocations,
   reversePayment,
+  sendPaymentReceiptEmail,
   updatePaymentMetadata,
 } from "@/app/admin/alumnos/[id]/payment-actions"
 import { Button } from "@/components/ui/button"
@@ -56,6 +59,7 @@ export function PaymentDetailsSheet({
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<View>("detail")
   const [error, setError] = useState<string | null>(null)
+  const [isSendingReceipt, setIsSendingReceipt] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const confirmed = payment.status === "CONFIRMED"
@@ -72,7 +76,32 @@ export function PaymentDetailsSheet({
     setOpen(false)
     setView("detail")
     setError(null)
+    setIsSendingReceipt(false)
     submittingRef.current = false
+  }
+
+  function sendReceipt() {
+    if (submittingRef.current || isSendingReceipt) return
+
+    submittingRef.current = true
+    setIsSendingReceipt(true)
+    startTransition(async () => {
+      const result = await sendPaymentReceiptEmail(studentId, payment.id)
+      submittingRef.current = false
+      setIsSendingReceipt(false)
+
+      if (result.ok) {
+        toastManager.add({ title: "Comprobante enviado por correo." })
+        return
+      }
+
+      if (result.reason === "NO_RECIPIENTS") {
+        toastManager.add({ title: "No hay un correo habilitado para este alumno." })
+        return
+      }
+
+      toastManager.add({ title: "No fue posible enviar el comprobante." })
+    })
   }
 
   return (
@@ -110,11 +139,14 @@ export function PaymentDetailsSheet({
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {view === "detail" && (
               <PaymentDetail
+                studentId={studentId}
                 payment={payment}
                 charges={chargeById}
+                sendingReceipt={isSendingReceipt}
                 canManage={canManage}
                 confirmed={confirmed}
                 correctionAvailable={correctionAvailable}
+                onSendReceipt={sendReceipt}
                 onEditMetadata={() => setView("metadata")}
                 onCorrectAllocations={() => setView("allocations")}
                 onReverse={() => setView("reverse")}
@@ -227,20 +259,26 @@ function PaymentSheetHeader({
 }
 
 function PaymentDetail({
+  studentId,
   payment,
   charges,
+  sendingReceipt,
   canManage,
   confirmed,
   correctionAvailable,
+  onSendReceipt,
   onEditMetadata,
   onCorrectAllocations,
   onReverse,
 }: {
+  studentId: string
   payment: StudentPaymentDetail
   charges: Map<string, StudentChargeBalance>
+  sendingReceipt: boolean
   canManage: boolean
   confirmed: boolean
   correctionAvailable: boolean
+  onSendReceipt: () => void
   onEditMetadata: () => void
   onCorrectAllocations: () => void
   onReverse: () => void
@@ -262,6 +300,26 @@ function PaymentDetail({
           {payment.notes && <DetailItem label="Notas internas" value={payment.notes} />}
           {payment.receiptVisibleNote && <DetailItem label="Nota visible en recibo" value={payment.receiptVisibleNote} />}
         </dl>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 w-full sm:w-auto"
+          nativeButton={false}
+          render={<a href={`/admin/alumnos/${studentId}/pagos/${payment.id}/recibo`} />}
+        >
+          <Download />
+          Descargar recibo
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 w-full sm:w-auto"
+          disabled={sendingReceipt}
+          onClick={onSendReceipt}
+        >
+          {sendingReceipt ? <LoaderCircle className="animate-spin" /> : <Mail />}
+          {sendingReceipt ? "Enviando..." : "Enviar por correo"}
+        </Button>
       </section>
 
       <section className="space-y-3 border-t border-border pt-6">

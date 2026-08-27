@@ -60,7 +60,7 @@ function asText(value: unknown): string {
 export async function getStudentCatalogs(supabase: SupabaseClient) {
   const { data: cycles, error: cyclesError } = await supabase
     .from("school_cycles")
-    .select("id, code, name, starts_on, status")
+    .select("id, code, name, starts_on, ends_on, status")
     .order("starts_on", { ascending: false })
 
   if (cyclesError) {

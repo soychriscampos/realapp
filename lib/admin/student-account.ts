@@ -28,6 +28,9 @@ export type StudentChargeBalance = {
 export type StudentAccountMovement = {
   id: string
   parentId: string | null
+  cycleId: string | null
+  financialConceptId: string | null
+  conceptCode: string | null
   movementOn: string
   recordedAt: string
   movementType: string
@@ -101,6 +104,9 @@ type ChargeBalanceRow = {
 type AccountMovementRow = {
   reference_id: unknown
   parent_reference_id: unknown
+  cycle_id: unknown
+  financial_concept_id: unknown
+  concept_code: unknown
   movement_on: unknown
   recorded_at: unknown
   movement_type: unknown
@@ -286,6 +292,9 @@ function mapMovement(row: AccountMovementRow): StudentAccountMovement {
   return {
     id: text(row.reference_id),
     parentId: nullableText(row.parent_reference_id),
+    cycleId: nullableText(row.cycle_id),
+    financialConceptId: nullableText(row.financial_concept_id),
+    conceptCode: nullableText(row.concept_code),
     movementOn: text(row.movement_on),
     recordedAt: text(row.recorded_at),
     movementType: text(row.movement_type),
