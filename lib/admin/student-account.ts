@@ -31,6 +31,9 @@ export type StudentAccountMovement = {
   cycleId: string | null
   financialConceptId: string | null
   conceptCode: string | null
+  conceptName: string | null
+  coverageYear: number | null
+  coverageMonth: number | null
   movementOn: string
   recordedAt: string
   movementType: string
@@ -117,6 +120,13 @@ type AccountMovementRow = {
   status: unknown
 }
 
+type VoidChargeRow = {
+  id: unknown
+  coverage_year: unknown
+  coverage_month: unknown
+  financial_concepts: unknown
+}
+
 type PaymentDetailRow = {
   id: unknown
   amount: unknown
@@ -172,10 +182,15 @@ export async function getStudentAccount(
   supabase: SupabaseClient,
   studentId: string
 ): Promise<{ data: StudentAccount | null; error: boolean }> {
-  const [summaryResult, chargesResult, movementsResult] = await Promise.all([
+  const [summaryResult, chargesResult, movementsResult, voidChargesResult] = await Promise.all([
     supabase.rpc("student_account_summary", { p_student_id: studentId }),
     supabase.rpc("student_charge_balances", { p_student_id: studentId }),
     supabase.rpc("student_account_movements", { p_student_id: studentId }),
+    supabase
+      .from("charges")
+      .select("id, coverage_year, coverage_month, financial_concepts!inner(name)")
+      .eq("student_id", studentId)
+      .eq("status", "VOID"),
   ])
 
   if (summaryResult.error || chargesResult.error || movementsResult.error) {
@@ -185,6 +200,19 @@ export async function getStudentAccount(
   const summaries = summaryResult.data as AccountSummaryRow[] | null
   const charges = chargesResult.data as ChargeBalanceRow[] | null
   const movements = movementsResult.data as AccountMovementRow[] | null
+  const voidChargeMetadata = new Map(
+    ((voidChargesResult.data as VoidChargeRow[] | null) ?? []).flatMap((charge) => {
+      const id = text(charge.id)
+      if (!id) return []
+
+      const concept = record(charge.financial_concepts)
+      return [[id, {
+        conceptName: nullableText(concept?.name),
+        coverageYear: numberOrNull(charge.coverage_year),
+        coverageMonth: numberOrNull(charge.coverage_month),
+      }] as const]
+    })
+  )
 
   if (!summaries?.[0]) return { data: null, error: false }
 
@@ -192,7 +220,7 @@ export async function getStudentAccount(
     data: {
       summary: mapSummary(summaries[0]),
       charges: (charges ?? []).map(mapCharge),
-      movements: (movements ?? []).map(mapMovement),
+      movements: (movements ?? []).map((movement) => mapMovement(movement, voidChargeMetadata)),
     },
     error: false,
   }
@@ -288,13 +316,20 @@ function mapCharge(row: ChargeBalanceRow): StudentChargeBalance {
   }
 }
 
-function mapMovement(row: AccountMovementRow): StudentAccountMovement {
+function mapMovement(row: AccountMovementRow, voidChargeMetadata?: Map<string, VoidChargeMetadata>): StudentAccountMovement {
+  const metadata = row.movement_type === "CHARGE_VOIDED"
+    ? voidChargeMetadata?.get(text(row.reference_id))
+    : undefined
+
   return {
     id: text(row.reference_id),
     parentId: nullableText(row.parent_reference_id),
     cycleId: nullableText(row.cycle_id),
     financialConceptId: nullableText(row.financial_concept_id),
     conceptCode: nullableText(row.concept_code),
+    conceptName: metadata?.conceptName ?? null,
+    coverageYear: metadata?.coverageYear ?? null,
+    coverageMonth: metadata?.coverageMonth ?? null,
     movementOn: text(row.movement_on),
     recordedAt: text(row.recorded_at),
     movementType: text(row.movement_type),
@@ -306,8 +341,20 @@ function mapMovement(row: AccountMovementRow): StudentAccountMovement {
   }
 }
 
+type VoidChargeMetadata = {
+  conceptName: string | null
+  coverageYear: number | null
+  coverageMonth: number | null
+}
+
 function text(value: unknown) {
   return typeof value === "string" ? value : ""
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
 }
 
 function nullableText(value: unknown) {

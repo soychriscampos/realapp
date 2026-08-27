@@ -473,12 +473,30 @@ function SecondaryMovement({ movement }: { movement: StudentAccountMovement }) {
   return (
     <article className="flex items-start justify-between gap-4 py-3 text-sm">
       <div className="min-w-0">
-        <p className="font-medium">{secondaryLabel(movement.movementType)}</p>
-        <p className="mt-1 text-muted-foreground">{formatDate(movement.movementOn)}</p>
+        <p className="text-muted-foreground">{formatSecondaryDate(movement.movementOn)}</p>
+        <p className="mt-1 font-medium">{secondaryMovementLabel(movement)}</p>
       </div>
       <p className="shrink-0 font-medium tabular-nums">{formatSecondaryAmount(movement)}</p>
     </article>
   )
+}
+
+function secondaryMovementLabel(movement: StudentAccountMovement) {
+  if (movement.movementType !== "CHARGE_VOIDED") return secondaryLabel(movement.movementType)
+
+  const concept = movement.conceptName || chargeConceptLabel(movement.conceptCode)
+  const period = coveragePeriodLabel(movement.coverageYear, movement.coverageMonth)
+  return ["Cargo anulado", concept && `${concept}${period ? ` ${period}` : ""}`].filter(Boolean).join(" · ")
+}
+
+function chargeConceptLabel(code: string | null) {
+  return code === "TUITION" ? "Colegiatura" : code === "ENROLLMENT_FEE" ? "Inscripción" : null
+}
+
+function coveragePeriodLabel(year: number | null, month: number | null) {
+  if (!year || !month || month < 1 || month > 12) return null
+  const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+  return `${months[month - 1]} ${String(year).slice(-2)}`
 }
 
 function groupChargesByCycle(charges: StudentChargeBalance[]) {
@@ -568,5 +586,13 @@ function formatDate(value: string) {
     day: "numeric",
     month: "short",
     year: "numeric",
+  }).format(new Date(`${value}T12:00:00`))
+}
+
+function formatSecondaryDate(value: string) {
+  return new Intl.DateTimeFormat("es-MX", {
+    day: "numeric",
+    month: "short",
+    year: "2-digit",
   }).format(new Date(`${value}T12:00:00`))
 }
