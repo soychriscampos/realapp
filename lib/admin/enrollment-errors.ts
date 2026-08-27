@@ -1,4 +1,4 @@
-export type EnrollmentErrorContext = "activation" | "preregistration" | "plan" | "group" | "classification" | "withdrawal" | "reactivation"
+export type EnrollmentErrorContext = "activation" | "preregistration" | "plan" | "group" | "classification" | "withdrawal" | "reactivation" | "finalization" | "graduation" | "cycle_closure"
 
 export function mapEnrollmentError(message: string | undefined, context: EnrollmentErrorContext) {
   const technicalMessage = message?.trim() ?? ""
@@ -123,11 +123,47 @@ export function mapEnrollmentError(message: string | undefined, context: Enrollm
     }
   }
 
+  if (context === "finalization") {
+    if (normalized.includes("only an active school cycle")) {
+      friendlyMessage = "Solo se puede finalizar un ciclo escolar activo."
+    } else if (normalized.includes("effective_on must belong")) {
+      friendlyMessage = "La fecha efectiva debe estar dentro del ciclo escolar."
+    } else if (normalized.includes("enrollment changed")) {
+      friendlyMessage = "Una matrícula cambió mientras se finalizaba el ciclo. Actualiza la pantalla e inténtalo de nuevo."
+    }
+  }
+
+  if (context === "graduation") {
+    if (normalized.includes("only finalizada enrollment")) {
+      friendlyMessage = "Solo se puede egresar una matrícula finalizada."
+    } else if (normalized.includes("not eligible for graduation")) {
+      friendlyMessage = "Este grado no es elegible para egreso."
+    } else if (normalized.includes("enrollment changed")) {
+      friendlyMessage = "La matrícula cambió mientras se registraba el egreso. Actualiza la pantalla e inténtalo de nuevo."
+    }
+  }
+
+  if (context === "cycle_closure") {
+    if (normalized.includes("active enrollments remain")) {
+      friendlyMessage = "Aún hay matrículas activas. Finaliza las matrículas antes de cerrar el ciclo."
+    } else if (normalized.includes("only an active school cycle")) {
+      friendlyMessage = "Solo se puede cerrar un ciclo escolar activo."
+    } else if (normalized.includes("school cycle changed")) {
+      friendlyMessage = "El ciclo cambió mientras se cerraba. Actualiza la pantalla e inténtalo de nuevo."
+    }
+  }
+
   if (normalized.includes("permission") || normalized.includes("authentication")) {
     friendlyMessage = context === "withdrawal"
       ? "No tienes autorización para registrar esta baja."
       : context === "reactivation"
         ? "No tienes autorización para reactivar esta matrícula."
+        : context === "finalization"
+          ? "No tienes autorización para finalizar las matrículas."
+        : context === "graduation"
+          ? "No tienes autorización para registrar el egreso."
+        : context === "cycle_closure"
+          ? "No tienes autorización para cerrar el ciclo escolar."
         : context === "activation" || context === "preregistration"
           ? "No tienes autorización para crear esta matrícula."
           : `No tienes autorización para ${context === "plan" ? "cambiar el plan financiero" : context === "group" ? "cambiar el grupo" : "cambiar la clasificación"}.`
@@ -147,6 +183,9 @@ function defaultMessage(context: EnrollmentErrorContext) {
   if (context === "group") return "No pudimos cambiar el grupo. Revisa los datos e inténtalo de nuevo."
   if (context === "classification") return "No pudimos cambiar la clasificación. Revisa los datos e inténtalo de nuevo."
   if (context === "withdrawal") return "No pudimos completar la baja. Revisa los datos e inténtalo de nuevo."
+  if (context === "finalization") return "No pudimos finalizar las matrículas. Revisa los datos e inténtalo de nuevo."
+  if (context === "graduation") return "No pudimos registrar el egreso. Revisa los datos e inténtalo de nuevo."
+  if (context === "cycle_closure") return "No pudimos cerrar el ciclo escolar. Revisa los datos e inténtalo de nuevo."
   return "No pudimos reactivar la matrícula. Revisa los datos e inténtalo de nuevo."
 }
 

@@ -1066,6 +1066,62 @@ export async function withdrawEnrollment(input: {
   return { ok: true }
 }
 
+export async function finalizeActiveEnrollments(input: {
+  cycleId: string
+  effectiveOn: string
+}): Promise<{ ok: true; finalizedCount: number } | { ok: false; message: string }> {
+  if (!input.cycleId || !isDate(input.effectiveOn)) {
+    return { ok: false, message: "Selecciona una fecha efectiva válida." }
+  }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { data, error } = await supabase.rpc("finalize_active_enrollments", {
+    p_cycle_id: input.cycleId,
+    p_effective_on: input.effectiveOn,
+  })
+
+  if (error || typeof data !== "number") {
+    return { ok: false, message: mapEnrollmentError(error?.message, "finalization") }
+  }
+
+  revalidatePath("/admin/matricula")
+  return { ok: true, finalizedCount: data }
+}
+
+export async function graduateEnrollment(input: {
+  enrollmentId: string
+  effectiveOn: string
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!input.enrollmentId || !isDate(input.effectiveOn)) {
+    return { ok: false, message: "Selecciona una fecha efectiva válida." }
+  }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { error } = await supabase.rpc("graduate_enrollment", {
+    p_enrollment_id: input.enrollmentId,
+    p_effective_on: input.effectiveOn,
+  })
+
+  if (error) return { ok: false, message: mapEnrollmentError(error.message, "graduation") }
+  revalidatePath("/admin/matricula")
+  return { ok: true }
+}
+
+export async function closeSchoolCycle(input: {
+  cycleId: string
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!input.cycleId) return { ok: false, message: "Selecciona un ciclo escolar válido." }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { error } = await supabase.rpc("close_school_cycle", {
+    p_cycle_id: input.cycleId,
+  })
+
+  if (error) return { ok: false, message: mapEnrollmentError(error.message, "cycle_closure") }
+  revalidatePath("/admin/matricula")
+  return { ok: true }
+}
+
 export async function getEnrollmentFeeCoverage(input: {
   studentId: string
   cycleId: string

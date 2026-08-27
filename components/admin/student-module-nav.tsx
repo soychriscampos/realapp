@@ -18,7 +18,9 @@ export function StudentModuleNav() {
     <nav aria-label="Sección de alumnos" className="overflow-x-auto border-b border-border">
       <div className="flex min-w-max gap-5">
         {items.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
+          const active = item.href === "/admin/alumnos"
+            ? pathname === item.href || (pathname.startsWith(`${item.href}/`) && !pathname.startsWith("/admin/alumnos/adeudos"))
+            : pathname === item.href
 
           return (
             <Link

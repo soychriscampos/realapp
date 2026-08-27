@@ -1,12 +1,9 @@
-import { ChevronLeft, Download } from "lucide-react"
+import { ChevronLeft } from "lucide-react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
-import { AccountSummary } from "@/components/admin/student-account"
 import { RegisterPaymentSheet } from "@/components/admin/register-payment-sheet"
-import { SendAccountStatementButton } from "@/components/admin/send-account-statement-button"
-import { StudentAccountDetails } from "@/components/admin/student-account-details"
-import { Button } from "@/components/ui/button"
+import { StudentAccountView } from "@/components/admin/student-account-view"
 import { getStudentAccount, getStudentPaymentDetails } from "@/lib/admin/student-account"
 import { getPaymentFormContext } from "@/lib/admin/payments"
 import { getStudentEmailRecipients } from "@/lib/email/recipients"
@@ -45,7 +42,7 @@ export default async function StudentAccountPage({ params, searchParams }: Stude
     return <StudentAccountLoadError studentId={student.id} studentName={student.fullName} />
   }
 
-  const { summary, charges, movements } = accountResult.data
+  const { charges, movements } = accountResult.data
   const paymentIds = movements
     .filter((movement) => movement.movementType === "PAYMENT")
     .map((movement) => movement.id)
@@ -73,51 +70,29 @@ export default async function StudentAccountPage({ params, searchParams }: Stude
             <p className="mt-1 text-sm text-muted-foreground">{student.fullName}</p>
             <p className="mt-1 text-sm text-muted-foreground">{schoolContext}</p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Button
-              variant="outline"
-              className="h-10 w-full sm:w-auto"
-              nativeButton={false}
-              render={<a href={`/admin/alumnos/${student.id}/cuenta/pdf`} />}
-            >
-              <Download />
-              Descargar estado de cuenta
-            </Button>
-            <SendAccountStatementButton
-              studentId={student.id}
-              hasRecipients={!emailRecipientsResult.error && emailRecipientsResult.data.length > 0}
-            />
-            <RegisterPaymentSheet
-              student={{ id: student.id, fullName: student.fullName, context: schoolContext }}
-              charges={charges}
-              methods={paymentContextResult.data?.methods ?? []}
-              receivers={paymentContextResult.data?.receivers ?? []}
-              currentReceiverId={paymentContextResult.data?.currentReceiverId ?? null}
-              canReceiveForOthers={roles.includes("MASTER")}
-              disabledReason={paymentUnavailableReason(
-                paymentContextResult.error,
-                paymentContextResult.data?.currentReceiverId,
-                paymentContextResult.data?.receivers.length ?? 0,
-                roles.includes("MASTER")
-              )}
-              triggerClassName="w-full sm:w-auto"
-            />
-          </div>
+          <RegisterPaymentSheet
+            student={{ id: student.id, fullName: student.fullName, context: schoolContext }}
+            charges={charges}
+            methods={paymentContextResult.data?.methods ?? []}
+            receivers={paymentContextResult.data?.receivers ?? []}
+            currentReceiverId={paymentContextResult.data?.currentReceiverId ?? null}
+            canReceiveForOthers={roles.includes("MASTER")}
+            disabledReason={paymentUnavailableReason(
+              paymentContextResult.error,
+              paymentContextResult.data?.currentReceiverId,
+              paymentContextResult.data?.receivers.length ?? 0,
+              roles.includes("MASTER")
+            )}
+            triggerClassName="w-full sm:w-auto"
+          />
         </div>
       </header>
 
-      <section className="border-y border-border bg-white px-4 py-5 sm:rounded-xl sm:border sm:px-5" aria-labelledby="account-summary">
-        <h2 id="account-summary" className="text-base font-semibold">Resumen financiero</h2>
-        <div className="mt-4">
-          <AccountSummary summary={summary} />
-        </div>
-      </section>
-
-      <StudentAccountDetails
-        charges={charges}
-        movements={movements}
+      <StudentAccountView
+        student={{ id: student.id, fullName: student.fullName, context: schoolContext }}
+        account={accountResult.data}
         payments={paymentDetailsResult.data}
-        studentId={student.id}
+        hasEmailRecipients={!emailRecipientsResult.error && emailRecipientsResult.data.length > 0}
         currentReceiverId={paymentContextResult.data?.currentReceiverId ?? null}
         isMaster={roles.includes("MASTER")}
         paymentDetailsError={paymentDetailsResult.error}

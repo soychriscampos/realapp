@@ -48,7 +48,6 @@ export function SendAccountStatementButton({ studentId, hasRecipients }: SendAcc
         {isPending ? <LoaderCircle className="animate-spin" /> : <Mail />}
         {isPending ? "Enviando..." : "Enviar por correo"}
       </Button>
-      {!hasRecipients && <p className="text-xs text-muted-foreground">Sin correo disponible</p>}
     </div>
   )
 }

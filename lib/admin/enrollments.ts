@@ -10,7 +10,7 @@ export type EnrollmentFilters = {
   gradeLevelId?: string
   groupId?: string
   classificationId?: string
-  status?: string
+  status?: string | string[]
 }
 
 export type EnrollmentListItem = {
@@ -23,8 +23,8 @@ export type EnrollmentListItem = {
   closedOn: string | null
   classesStartOn: string | null
   student: { id: string; fullName: string; studentCode: string | null }
-  educationLevel: { id: string; name: string }
-  gradeLevel: { id: string; name: string }
+  educationLevel: { id: string; name: string; code: string }
+  gradeLevel: { id: string; name: string; code: string; isTerminal: boolean }
   group: { id: string; name: string; code: string } | null
   classification: { id: string; name: string }
   currentPlan: { id: string; installmentCount: number } | null
@@ -45,6 +45,19 @@ export type EnrollmentFinancialCoverage = {
   cycleId: string
   educationLevelId: string
   months: Array<{ year: number; month: number; dueDate: string }>
+}
+
+export async function getActiveEnrollmentCount(
+  supabase: SupabaseClient,
+  cycleId: string
+): Promise<{ count: number; error: boolean }> {
+  const { count, error } = await supabase
+    .from("enrollments")
+    .select("id", { count: "exact", head: true })
+    .eq("cycle_id", cycleId)
+    .eq("status", "ACTIVA")
+
+  return { count: count ?? 0, error: Boolean(error) }
 }
 
 type RecordValue = Record<string, unknown>
@@ -72,7 +85,7 @@ export async function getEnrollments(
   let query = supabase
     .from("enrollments")
     .select(
-      "id, cycle_id, status, enrolled_on, closed_on, classes_start_on, school_cycles!inner(name, starts_on, ends_on), students!inner(id, full_name, student_code), grade_levels!inner(id, name, education_level_id, education_levels!inner(id, name)), groups(id, name, code), enrollment_classifications!inner(id, name), enrollment_financial_plan_assignments(id, financial_plan_id, economic_start_on, valid_until, financial_plans!inner(id, installment_count, cycle_id, education_level_id, status)), student_financial_agreements(agreed_amount, base_amount_snapshot, valid_from, valid_until, financial_concepts!inner(code)), enrollment_tuition_discount_assignments(valid_from, valid_until, tuition_discount_categories(id, name, discount_type))"
+      "id, cycle_id, status, enrolled_on, closed_on, classes_start_on, school_cycles!inner(name, starts_on, ends_on), students!inner(id, full_name, student_code), grade_levels!inner(id, name, code, education_level_id, is_terminal, education_levels!inner(id, name, code)), groups(id, name, code), enrollment_classifications!inner(id, name), enrollment_financial_plan_assignments(id, financial_plan_id, economic_start_on, valid_until, financial_plans!inner(id, installment_count, cycle_id, education_level_id, status)), student_financial_agreements(agreed_amount, base_amount_snapshot, valid_from, valid_until, financial_concepts!inner(code)), enrollment_tuition_discount_assignments(valid_from, valid_until, tuition_discount_categories(id, name, discount_type))"
     )
     .eq("cycle_id", filters.cycleId)
     .order("enrolled_on", { ascending: false })
@@ -97,7 +110,11 @@ export async function getEnrollments(
   if (filters.classificationId) {
     query = query.eq("classification_id", filters.classificationId)
   }
-  if (filters.status) query = query.eq("status", filters.status)
+  if (filters.status) {
+    query = Array.isArray(filters.status)
+      ? query.in("status", filters.status)
+      : query.eq("status", filters.status)
+  }
 
   const { data, error } = await query
   if (error) return { data: [], error: true }
@@ -172,8 +189,8 @@ export async function getEnrollments(
           fullName: text(student.full_name),
           studentCode: typeof student.student_code === "string" ? student.student_code : null,
         },
-        educationLevel: { id: text(educationLevel.id), name: text(educationLevel.name) },
-        gradeLevel: { id: text(gradeLevel.id), name: text(gradeLevel.name) },
+        educationLevel: { id: text(educationLevel.id), name: text(educationLevel.name), code: text(educationLevel.code) },
+        gradeLevel: { id: text(gradeLevel.id), name: text(gradeLevel.name), code: text(gradeLevel.code), isTerminal: gradeLevel.is_terminal === true },
         group: group ? { id: text(group.id), name: text(group.name), code: text(group.code) } : null,
         classification: { id: text(classification.id), name: text(classification.name) },
         currentPlan: currentPlan

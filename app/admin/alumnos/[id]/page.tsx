@@ -3,13 +3,17 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { EnrollmentActions } from "@/components/admin/enrollment-actions"
+import { GraduateEnrollmentSheet } from "@/components/admin/graduate-enrollment-sheet"
 import { AddGuardianSheet, EditGuardianSheet } from "@/components/admin/edit-guardian-sheet"
 import { EditStudentBasicsSheet } from "@/components/admin/edit-student-basics-sheet"
 import { AccountSummary } from "@/components/admin/student-account"
 import { RegisterPaymentSheet } from "@/components/admin/register-payment-sheet"
+import { StudentAccountView } from "@/components/admin/student-account-view"
 import {
+  getStudentAccount,
   getStudentAccountSummary,
   getStudentChargeBalances,
+  getStudentPaymentDetails,
 } from "@/lib/admin/student-account"
 import { getTuitionDiscountCategories } from "@/lib/admin/discount-categories"
 import {
@@ -18,8 +22,10 @@ import {
   getEnrollmentGroupLabel,
   getEnrollments,
   getTenPaymentPlans,
+  type EnrollmentListItem,
 } from "@/lib/admin/enrollments"
 import { getPaymentFormContext } from "@/lib/admin/payments"
+import { getStudentEmailRecipients } from "@/lib/email/recipients"
 import { getStudentCatalogs, getStudentDetail } from "@/lib/admin/students"
 import { requireRole } from "@/lib/auth/require-role"
 
@@ -32,8 +38,7 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
   const { id } = await params
   const query = await searchParams
   const returnTo = validReturnTo(query.returnTo)
-  const accountHref = studentAccountHref(id, returnTo)
-  const activeTab = query.tab === "enrollment" || query.tab === "academic" || query.tab === "family" ? query.tab : "summary"
+  const activeTab = query.tab === "account" || query.tab === "enrollment" || query.tab === "academic" || query.tab === "family" ? query.tab : "summary"
   const { roles, supabase, userId } = await requireRole(["MASTER", "ADMINISTRATIVO"])
   const { catalogs, error: catalogsError } = await getStudentCatalogs(supabase)
 
@@ -51,6 +56,8 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
     financialCoverageResult,
     discountCategoriesResult,
     groupsResult,
+    accountResult,
+    emailRecipientsResult,
   ] = await Promise.all([
     getStudentDetail(supabase, id, operationalCycleId),
     getStudentAccountSummary(supabase, id),
@@ -76,10 +83,23 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
           .eq("is_active", true)
           .order("name")
       : Promise.resolve({ data: [], error: null }),
+    activeTab === "account"
+      ? getStudentAccount(supabase, id)
+      : Promise.resolve({ data: null, error: false }),
+    activeTab === "account"
+      ? getStudentEmailRecipients(supabase, id)
+      : Promise.resolve({ data: [], error: false }),
   ])
 
   if (error) return <StudentDetailLoadError />
   if (!student) notFound()
+
+  const accountPaymentIds = accountResult.data?.movements
+    .filter((movement) => movement.movementType === "PAYMENT")
+    .map((movement) => movement.id) ?? []
+  const accountPaymentsResult = activeTab === "account" && accountResult.data
+    ? await getStudentPaymentDetails(supabase, student.id, accountPaymentIds)
+    : { data: [], error: false }
 
   const actionEnrollment = enrollmentResult.data[0] ?? null
   const enrollment = actionEnrollment ?? student.enrollment
@@ -93,7 +113,7 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
       !discountCategoriesResult.error
   )
   const studentContext = enrollment
-    ? `${enrollment.gradeLevel.name}${enrollment.group ? ` · ${getEnrollmentGroupLabel(enrollment.group)}` : ""}`
+    ? `${enrollment.educationLevel.name} · ${enrollment.gradeLevel.name}${enrollment.group ? ` · ${getEnrollmentGroupLabel(enrollment.group)}` : ""}`
     : "Sin matrícula en el ciclo operativo"
 
   return (
@@ -147,8 +167,8 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
             Resumen
           </Link>
           <Link
-            href={accountHref}
-            className="px-1 pb-3 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            href={studentTabHref(id, returnTo, "account")}
+            className={activeTab === "account" ? "border-b-2 border-foreground px-1 pb-3 text-sm font-medium" : "px-1 pb-3 text-sm text-muted-foreground hover:text-foreground"}
           >
             Cuenta
           </Link>
@@ -174,26 +194,30 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
       </nav>
 
       <div className="grid gap-7 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,.8fr)]">
-        <aside className={activeTab === "summary" ? "hidden" : "order-first space-y-7 xl:order-none xl:col-start-2"}>
+        {activeTab === "account" ? <div className="order-last min-w-0 space-y-7 xl:order-none xl:col-span-2 xl:row-start-1">
+          {accountResult.error || !accountResult.data ? (
+            <AccountLoadError studentId={student.id} />
+          ) : (
+            <StudentAccountView
+              student={{ id: student.id, fullName: student.fullName, context: studentContext }}
+              account={accountResult.data}
+              payments={accountPaymentsResult.data}
+              hasEmailRecipients={!emailRecipientsResult.error && emailRecipientsResult.data.length > 0}
+              currentReceiverId={paymentContextResult.data?.currentReceiverId ?? null}
+              isMaster={roles.includes("MASTER")}
+              paymentDetailsError={accountPaymentsResult.error}
+              operationalCycleId={operationalCycleId}
+            />
+          )}
+        </div> : activeTab === "summary" ? <div className="order-last space-y-7 xl:order-none xl:col-start-1 xl:row-start-1">
           <SummarySection title="Cuenta">
             {accountSummaryResult.error || !accountSummaryResult.data ? (
-              <AccountLoadError studentId={student.id} />
+              <p className="text-sm text-muted-foreground">No pudimos cargar el resumen financiero.</p>
             ) : (
-              <div className="space-y-4">
-                <AccountSummary summary={accountSummaryResult.data} compact />
-                <Link
-                  href={accountHref}
-                  className="inline-flex min-h-9 items-center text-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                >
-                  Ver estado de cuenta
-                </Link>
-              </div>
+              <AccountSummary summary={accountSummaryResult.data} compact />
             )}
           </SummarySection>
 
-        </aside>
-
-        {activeTab === "summary" ? <div className="order-last space-y-7 xl:order-none xl:col-start-1 xl:row-start-1">
           <SummarySection title="Datos básicos" action={<EditStudentBasicsSheet student={{ id: student.id, fullName: student.fullName, birthDate: student.birthDate, sex: student.sex }} />}>
             <dl className="grid gap-4 sm:grid-cols-2">
               <Detail label="Fecha de nacimiento" value={student.birthDate ? formatDate(student.birthDate) : "Sin especificar"} />
@@ -219,7 +243,6 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
                 <Detail label="Saldo vencido" value={formatCurrency(Number(accountSummaryResult.data.overdueTotal))} />
                 {Number(accountSummaryResult.data.availableCredit) > 0 && <Detail label="Saldo a favor" value={formatCurrency(Number(accountSummaryResult.data.availableCredit))} />}
               </dl>
-              <Link href={accountHref} className="mt-5 inline-flex min-h-9 items-center text-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Ver estado de cuenta</Link>
             </>}
           </SummarySection>
 
@@ -252,15 +275,18 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
                   {actionEnrollment?.closedOn && <Detail label="Fecha de cierre" value={formatDate(actionEnrollment.closedOn)} />}
                 </dl>
                 {schoolActionsAvailable && actionEnrollment && (
-                  <EnrollmentActions
-                    section="school"
-                    enrollment={actionEnrollment}
-                    groups={groupsResult.data ?? []}
-                    classifications={catalogs?.classifications ?? []}
-                    tenPaymentPlans={tenPaymentPlansResult.data}
-                    financialCoverage={financialCoverageResult.data}
-                    discountCategories={discountCategoriesResult.data}
-                  />
+                  <>
+                    <EnrollmentActions
+                      section="school"
+                      enrollment={actionEnrollment}
+                      groups={groupsResult.data ?? []}
+                      classifications={catalogs?.classifications ?? []}
+                      tenPaymentPlans={tenPaymentPlansResult.data}
+                      financialCoverage={financialCoverageResult.data}
+                      discountCategories={discountCategoriesResult.data}
+                    />
+                    {actionEnrollment.status === "FINALIZADA" && isGraduationEligible(actionEnrollment) && <div className="mt-5 border-t border-border pt-4"><GraduateEnrollmentSheet enrollment={actionEnrollment} /></div>}
+                  </>
                 )}
               </>
             ) : (
@@ -302,20 +328,6 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
             )}
           </SummarySection>}
 
-          <SummarySection title="Tutores">
-            {student.guardians.length ? (
-              <div className="divide-y divide-border">
-                {student.guardians.map((guardian) => (
-                  <div key={`${guardian.fullName}-${guardian.relationship}`} className="py-3 first:pt-0 last:pb-0">
-                    <p className="text-sm font-medium">{guardian.fullName}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{guardian.relationship}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No hay tutores activos registrados.</p>
-            )}
-          </SummarySection>
         </div> : activeTab === "academic" ? <div className="order-last space-y-7 xl:order-none xl:col-start-1 xl:row-start-1">
           <SummarySection title="Académico">
             <p className="text-sm font-medium">Próximamente</p>
@@ -372,17 +384,15 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
           </SummarySection>
         </div>}
 
-        <aside className={activeTab === "summary" ? "hidden" : "order-last space-y-7 xl:order-none xl:col-start-2 xl:row-start-2"}>
-          <SummarySection title="Datos del alumno">
-            <dl className="space-y-4">
-              {student.studentCode && <Detail label="Código" value={student.studentCode} />}
-              {student.birthDate && <Detail label="Fecha de nacimiento" value={formatDate(student.birthDate)} />}
-            </dl>
-          </SummarySection>
-        </aside>
-
       </div>
     </div>
+  )
+}
+
+function isGraduationEligible(enrollment: EnrollmentListItem) {
+  return enrollment.gradeLevel.isTerminal && (
+    (enrollment.educationLevel.code === "PRIMARIA" && enrollment.gradeLevel.code === "6") ||
+    (enrollment.educationLevel.code === "PREESCOLAR" && enrollment.gradeLevel.code === "3")
   )
 }
 
@@ -394,12 +404,7 @@ function validReturnTo(value: string | string[] | undefined) {
   return value
 }
 
-function studentAccountHref(studentId: string, returnTo: string) {
-  if (returnTo === "/admin/alumnos") return `/admin/alumnos/${studentId}/cuenta`
-  return `/admin/alumnos/${studentId}/cuenta?returnTo=${encodeURIComponent(returnTo)}`
-}
-
-function studentTabHref(studentId: string, returnTo: string, tab: "summary" | "enrollment" | "academic" | "family") {
+function studentTabHref(studentId: string, returnTo: string, tab: "summary" | "account" | "enrollment" | "academic" | "family") {
   const params = new URLSearchParams()
   if (tab !== "summary") params.set("tab", tab)
   if (returnTo !== "/admin/alumnos") params.set("returnTo", returnTo)

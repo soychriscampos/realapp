@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 export type StudentFilters = {
+  globalSearch?: boolean
   contextCycleId?: string
   cycleId?: string
   educationLevelId?: string
@@ -140,7 +141,7 @@ export async function getStudents(
   supabase: SupabaseClient,
   filters: StudentFilters
 ): Promise<{ data: StudentListItem[]; error: boolean }> {
-  const contextCycleId = filters.cycleId ?? filters.contextCycleId
+  const contextCycleId = filters.globalSearch ? undefined : filters.cycleId ?? filters.contextCycleId
   const hasEnrollmentFilters = Boolean(
     filters.cycleId ||
       filters.educationLevelId ||
@@ -152,7 +153,9 @@ export async function getStudents(
   const enrollmentRelation = hasEnrollmentFilters
     ? "enrollments!inner"
     : "enrollments"
-  const enrollmentSelection = contextCycleId
+  const enrollmentSelection = filters.globalSearch
+    ? `, enrollments(id, status, enrolled_on, classes_start_on, school_cycles!inner(id, code, name, status), grade_levels!inner(id, name, education_level_id, education_levels!inner(id, name)), groups(id, name, code), enrollment_classifications!inner(id, name, code))`
+    : contextCycleId
     ? `, ${enrollmentRelation}(id, status, enrolled_on, classes_start_on, school_cycles!inner(id, code, name, status), grade_levels!inner(id, name, education_level_id, education_levels!inner(id, name)), groups(id, name, code), enrollment_classifications!inner(id, name, code))`
     : ""
   const studentSelection: string = `id, full_name, student_code${enrollmentSelection}`
@@ -164,11 +167,9 @@ export async function getStudents(
     .limit(50)
 
   if (filters.query) {
-    query = query.filter(
-      "full_name",
-      "imatch",
-      buildStudentNameSearchPattern(filters.query)
-    )
+    const namePattern = buildStudentNameSearchPattern(filters.query)
+    const codeTerm = filters.query.trim().replace(/[(),]/g, " ")
+    query = query.or(`full_name.imatch.${namePattern},student_code.ilike.%${codeTerm}%`)
   }
 
   if (contextCycleId) query = query.eq("enrollments.cycle_id", contextCycleId)
