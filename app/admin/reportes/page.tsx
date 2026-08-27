@@ -1,7 +1,12 @@
 import { ArrowRight } from "lucide-react"
 import Link from "next/link"
 
-export default function ReportsPage() {
+import { requireRole } from "@/lib/auth/require-role"
+
+export default async function ReportsPage() {
+  const { roles } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const isMaster = roles.includes("MASTER")
+
   return (
     <div className="space-y-7">
       <header>
@@ -24,18 +29,20 @@ export default function ReportsPage() {
           </span>
           <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
         </Link>
-        <Link
-          href="/admin/reportes/financieros"
-          className="flex min-h-20 items-center justify-between gap-4 px-4 py-4 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        >
-          <span>
-            <span className="block text-sm font-semibold">Financieros</span>
-            <span className="mt-1 block text-sm text-muted-foreground">
-              Consulta ingresos netos por periodo, método y receptor.
+        {isMaster && (
+          <Link
+            href="/admin/reportes/financieros"
+            className="flex min-h-20 items-center justify-between gap-4 px-4 py-4 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <span>
+              <span className="block text-sm font-semibold">Financieros</span>
+              <span className="mt-1 block text-sm text-muted-foreground">
+                Consulta ingresos netos por periodo, método y receptor.
+              </span>
             </span>
-          </span>
-          <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
-        </Link>
+            <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+          </Link>
+        )}
       </div>
     </div>
   )

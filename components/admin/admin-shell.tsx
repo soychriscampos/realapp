@@ -5,9 +5,7 @@ import { Menu } from "@base-ui/react/menu"
 import {
   Banknote,
   BarChart3,
-  BookOpen,
   ChevronRight,
-  CreditCard,
   GraduationCap,
   Home,
   LogOut,
@@ -36,8 +34,6 @@ const primaryNavigation = [
   { label: "Inicio", href: "/admin", icon: Home },
   { label: "Alumnos", href: "/admin/alumnos", icon: Users },
   { label: "Matrícula", href: "/admin/matricula", icon: GraduationCap },
-  { label: "Pagos", href: "/admin/pagos", icon: CreditCard },
-  { label: "Académico", href: "/admin/academico", icon: BookOpen },
   { label: "Reportes", href: "/admin/reportes", icon: BarChart3 },
   { label: "Configuración", href: "/admin/configuracion", icon: Settings },
 ]
@@ -45,11 +41,11 @@ const primaryNavigation = [
 const mobileNavigation = [
   { label: "Inicio", href: "/admin", icon: Home },
   { label: "Alumnos", href: "/admin/alumnos", icon: Users },
-  { label: "Pagos", href: "/admin/pagos", icon: CreditCard },
+  { label: "Matrícula", href: "/admin/matricula", icon: GraduationCap },
 ]
 
 const moreNavigation = primaryNavigation.filter(
-  (item) => !["Inicio", "Alumnos", "Pagos"].includes(item.label)
+  (item) => !["Inicio", "Alumnos", "Matrícula"].includes(item.label)
 )
 
 export function AdminShell({ children, roleLabel }: AdminShellProps) {
@@ -70,9 +66,6 @@ export function AdminShell({ children, roleLabel }: AdminShellProps) {
                 <span className="block text-sm font-semibold">
                   Colegio REAL
                 </span>
-                <span className="block truncate text-[11px] text-muted-foreground">
-                  Ciclo 2026-2027
-                </span>
               </span>
             </Link>
           </div>
@@ -81,15 +74,15 @@ export function AdminShell({ children, roleLabel }: AdminShellProps) {
             <NavigationGroup items={primaryNavigation.slice(0, 1)} />
             <NavigationGroup
               label="Gestión"
-              items={primaryNavigation.slice(1, 4)}
+              items={primaryNavigation.slice(1, 3)}
             />
             <NavigationGroup
               label="Operación"
-              items={primaryNavigation.slice(4, 6)}
+              items={primaryNavigation.slice(3, 4)}
             />
             <NavigationGroup
               label="Sistema"
-              items={primaryNavigation.slice(6)}
+              items={primaryNavigation.slice(4)}
             />
           </nav>
 
@@ -124,9 +117,6 @@ export function AdminShell({ children, roleLabel }: AdminShellProps) {
           <div className="flex min-h-14 items-center justify-between gap-3 pt-[env(safe-area-inset-top)]">
             <div>
               <p className="text-sm font-semibold">REAL</p>
-              <p className="text-xs text-muted-foreground">
-                Ciclo 2026-2027
-              </p>
             </div>
             <UserMenu roleLabel={roleLabel} />
           </div>
