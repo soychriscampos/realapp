@@ -62,6 +62,7 @@ export async function requireRole(allowedRoles: AppRole[]) {
 
   return {
     userId,
+    email: typeof claimsData.claims.email === 'string' ? claimsData.claims.email : null,
     roles: currentRoles,
     supabase,
   }

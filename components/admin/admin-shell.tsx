@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils"
 type AdminShellProps = {
   children: ReactNode
   roleLabel: string
+  userName: string | null
 }
 
 const primaryNavigation = [
@@ -45,7 +46,7 @@ const moreNavigation = primaryNavigation.filter(
   (item) => !["Inicio", "Alumnos"].includes(item.label)
 )
 
-export function AdminShell({ children, roleLabel }: AdminShellProps) {
+export function AdminShell({ children, roleLabel, userName }: AdminShellProps) {
   const pathname = usePathname()
   const showDesktopSearch = pathname !== "/admin"
 
@@ -84,7 +85,7 @@ export function AdminShell({ children, roleLabel }: AdminShellProps) {
           </nav>
 
           <div className="border-t border-r border-border p-3">
-            <UserMenu roleLabel={roleLabel} align="top" />
+            <UserMenu roleLabel={roleLabel} userName={userName} align="top" />
           </div>
         </aside>
 
@@ -99,7 +100,7 @@ export function AdminShell({ children, roleLabel }: AdminShellProps) {
                   <StudentQuickSearch compact />
                 </div>
               )}
-              <UserMenu roleLabel={roleLabel} compact />
+              <UserMenu roleLabel={roleLabel} userName={userName} compact />
             </div>
           </header>
 
@@ -115,7 +116,7 @@ export function AdminShell({ children, roleLabel }: AdminShellProps) {
             <div>
               <p className="text-sm font-semibold">REAL</p>
             </div>
-            <UserMenu roleLabel={roleLabel} />
+            <UserMenu roleLabel={roleLabel} userName={userName} />
           </div>
         </header>
 
@@ -188,13 +189,18 @@ function NavigationItem({
 
 function UserMenu({
   roleLabel,
+  userName,
   align = "bottom",
   compact = false,
 }: {
   roleLabel: string
+  userName: string | null
   align?: "top" | "bottom"
   compact?: boolean
 }) {
+  const displayName = userName?.trim() || "Usuario REAL"
+  const initial = displayName.charAt(0).toUpperCase()
+
   return (
     <Menu.Root>
       <Menu.Trigger
@@ -205,7 +211,7 @@ function UserMenu({
         aria-label="Abrir menú de usuario"
       >
         <span className="flex size-8 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-          R
+          {initial}
         </span>
         <span
           className={cn(
@@ -213,7 +219,7 @@ function UserMenu({
             compact ? "items-center gap-1 whitespace-nowrap" : "flex-col"
           )}
         >
-          <span className="truncate font-medium">Usuario REAL</span>
+          <span className="truncate font-medium">{displayName}</span>
           <span className="truncate text-xs text-muted-foreground">
             {compact ? `· ${roleLabel}` : roleLabel}
           </span>
@@ -223,10 +229,15 @@ function UserMenu({
         <Menu.Positioner side={align} align="end" sideOffset={8}>
           <Menu.Popup className="z-50 min-w-56 rounded-xl border border-border bg-white p-1 shadow-lg outline-none">
             <div className="px-2 py-2">
-              <p className="text-sm font-medium">Usuario REAL</p>
+              <p className="text-sm font-medium">{displayName}</p>
               <p className="text-xs text-muted-foreground">{roleLabel}</p>
             </div>
             <Menu.Separator className="my-1 h-px bg-border" />
+            <Menu.Item
+              render={<Link href="/admin/perfil" className="flex h-9 items-center rounded-lg px-2 text-sm outline-none hover:bg-muted" />}
+            >
+              Mi perfil
+            </Menu.Item>
             <form action="/auth/signout" method="post">
               <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-destructive outline-none transition hover:bg-destructive/10 focus-visible:ring-3 focus-visible:ring-destructive/20">
                 <LogOut className="size-4" />

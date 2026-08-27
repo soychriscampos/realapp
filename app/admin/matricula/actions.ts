@@ -1119,6 +1119,7 @@ export async function closeSchoolCycle(input: {
 
   if (error) return { ok: false, message: mapEnrollmentError(error.message, "cycle_closure") }
   revalidatePath("/admin/matricula")
+  revalidatePath("/admin/configuracion")
   return { ok: true }
 }
 
