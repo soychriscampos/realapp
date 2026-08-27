@@ -1,6 +1,7 @@
 import { StudentFilters } from "@/components/admin/student-filters"
 import { StudentList } from "@/components/admin/student-list"
 import { StudentListSearch } from "@/components/admin/student-list-search"
+import { StudentModuleNav } from "@/components/admin/student-module-nav"
 import { getGroupsForCycle, getStudentCatalogs, getStudents } from "@/lib/admin/students"
 import { createClient } from "@/lib/supabase/server"
 import Link from "next/link"
@@ -44,6 +45,7 @@ export default async function StudentsPage({ searchParams }: StudentsPageProps) 
 
   return (
     <div className="space-y-6">
+      <StudentModuleNav />
       <header className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>

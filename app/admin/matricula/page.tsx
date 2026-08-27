@@ -8,10 +8,11 @@ import { NewEnrollmentSheet } from "@/components/admin/new-enrollment-sheet"
 import { PreregistrationCampaignSheet } from "@/components/admin/preregistration-campaign-sheet"
 import { PreregistrationEnrollmentSheet } from "@/components/admin/preregistration-enrollment-sheet"
 import { PreregistrationIntakeSheet } from "@/components/admin/preregistration-intake-sheet"
+import { StudentModuleNav } from "@/components/admin/student-module-nav"
 import { getBulkEnrollmentCandidates } from "@/lib/admin/bulk-enrollment"
 import { getBulkTuitionDiscountCandidates } from "@/lib/admin/bulk-tuition-discounts"
 import { getTuitionDiscountCategories } from "@/lib/admin/discount-categories"
-import { getEnrollmentFinancialCoverage, getEnrollments, getTenPaymentPlans } from "@/lib/admin/enrollments"
+import { getEnrollmentFinancialCoverage, getEnrollments } from "@/lib/admin/enrollments"
 import { getConvertiblePreregistrations } from "@/lib/admin/preregistrations"
 import { getPreregistrationCampaigns } from "@/lib/admin/preregistration-campaigns"
 import { getPaymentFormContext } from "@/lib/admin/payments"
@@ -42,7 +43,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
 
   if (!values.cycle) return <EnrollmentLoadError />
 
-  const [groupsResult, enrollmentResult, financialCoverageResult, tenPaymentPlansResult, discountCategoriesResult, paymentContextResult] = await Promise.all([
+  const [groupsResult, enrollmentResult, financialCoverageResult, discountCategoriesResult, paymentContextResult] = await Promise.all([
     supabase
       .from("groups")
       .select("id, name, code, cycle_id, grade_level_id")
@@ -58,12 +59,11 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
       status: tabStatus(values.tab, values.status),
     }),
     getEnrollmentFinancialCoverage(supabase),
-    getTenPaymentPlans(supabase),
     getTuitionDiscountCategories(supabase, values.cycle),
     getPaymentFormContext(supabase, userId),
   ])
 
-  if (groupsResult.error || enrollmentResult.error || financialCoverageResult.error || tenPaymentPlansResult.error || discountCategoriesResult.error) {
+  if (groupsResult.error || enrollmentResult.error || financialCoverageResult.error || discountCategoriesResult.error) {
     return <EnrollmentLoadError />
   }
 
@@ -87,6 +87,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
 
   return (
     <div className="space-y-6">
+      <StudentModuleNav />
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight sm:text-2xl">Matrícula</h1>
@@ -204,11 +205,6 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
         </p>
         <EnrollmentList
           enrollments={enrollmentResult.data}
-          groups={groupsResult.data ?? []}
-          classifications={catalogs.classifications}
-          tenPaymentPlans={tenPaymentPlansResult.data}
-          financialCoverage={financialCoverageResult.data}
-          discountCategories={discountCategoriesResult.data.filter((category) => category.isActive)}
         />
       </section>
     </div>

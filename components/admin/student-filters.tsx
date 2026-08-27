@@ -1,10 +1,13 @@
 "use client"
 
 import { Dialog } from "@base-ui/react/dialog"
+import { useState } from "react"
+import type { ChangeEvent } from "react"
 import { Filter, X } from "lucide-react"
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
+import { getEnrollmentGroupLabel } from "@/lib/admin/enrollments"
 
 type Option = { id: string; name: string }
 
@@ -73,6 +76,23 @@ function FilterFields({
   classifications,
   compact = false,
 }: StudentFiltersProps & { compact?: boolean }) {
+  const [levelId, setLevelId] = useState(values.level ?? "")
+  const [gradeId, setGradeId] = useState(values.grade ?? "")
+  const [groupId, setGroupId] = useState(values.group ?? "")
+  const filteredGrades = levelId
+    ? grades.filter((grade) => grade.education_level_id === levelId)
+    : grades
+  const filteredGroups = gradeId
+    ? groups.filter((group) => group.grade_level_id === gradeId)
+    : levelId
+      ? groups.filter((group) => filteredGrades.some((grade) => grade.id === group.grade_level_id))
+      : groups
+  const gradeOptions = filteredGrades.map((grade) => ({
+    ...grade,
+    name: levelId
+      ? grade.name
+      : `${levels.find((level) => level.id === grade.education_level_id)?.name ?? "Nivel"} · ${grade.name}`,
+  }))
   const className = compact
     ? "flex items-end gap-3"
     : "grid gap-4 sm:grid-cols-2"
@@ -89,23 +109,33 @@ function FilterFields({
       <FilterSelect
         label="Nivel"
         name="level"
-        value={values.level}
         options={levels}
         compact={compact}
+        value={levelId}
+        onChange={(nextValue) => {
+          setLevelId(nextValue)
+          setGradeId("")
+          setGroupId("")
+        }}
       />
       <FilterSelect
         label="Grado"
         name="grade"
-        value={values.grade}
-        options={grades}
+        options={gradeOptions}
         compact={compact}
+        value={gradeId}
+        onChange={(nextValue) => {
+          setGradeId(nextValue)
+          setGroupId("")
+        }}
       />
       <FilterSelect
         label="Grupo"
         name="group"
-        value={values.group}
-        options={groups}
+        options={filteredGroups.map((group) => ({ ...group, name: getEnrollmentGroupLabel(group) }))}
         compact={compact}
+        value={groupId}
+        onChange={(nextValue) => setGroupId(nextValue)}
       />
       <FilterSelect
         label="Estado"
@@ -132,12 +162,14 @@ function FilterSelect({
   value,
   options,
   compact,
+  onChange,
 }: {
   label: string
   name: string
   value?: string
   options: Option[]
   compact: boolean
+  onChange?: (value: string) => void
 }) {
   return (
     <label className={compact ? "w-32" : "grid gap-2 text-sm font-medium"}>
@@ -146,7 +178,12 @@ function FilterSelect({
       </span>
       <select
         name={name}
-        defaultValue={value ?? ""}
+        {...(onChange
+          ? {
+              value: value ?? "",
+              onChange: (event: ChangeEvent<HTMLSelectElement>) => onChange(event.target.value),
+            }
+          : { defaultValue: value ?? "" })}
         className="h-10 w-full rounded-lg border border-input bg-white px-2.5 text-sm outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/50"
       >
         <option value="">Todos</option>

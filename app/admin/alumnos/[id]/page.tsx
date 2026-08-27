@@ -2,13 +2,23 @@ import { ChevronLeft } from "lucide-react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
+import { EnrollmentActions } from "@/components/admin/enrollment-actions"
+import { AddGuardianSheet, EditGuardianSheet } from "@/components/admin/edit-guardian-sheet"
+import { EditStudentBasicsSheet } from "@/components/admin/edit-student-basics-sheet"
 import { AccountSummary } from "@/components/admin/student-account"
 import { RegisterPaymentSheet } from "@/components/admin/register-payment-sheet"
-import { formatEnrollmentStatus } from "@/components/admin/student-list"
 import {
   getStudentAccountSummary,
   getStudentChargeBalances,
 } from "@/lib/admin/student-account"
+import { getTuitionDiscountCategories } from "@/lib/admin/discount-categories"
+import {
+  formatEnrollmentStatus,
+  getEnrollmentFinancialCoverage,
+  getEnrollmentGroupLabel,
+  getEnrollments,
+  getTenPaymentPlans,
+} from "@/lib/admin/enrollments"
 import { getPaymentFormContext } from "@/lib/admin/payments"
 import { getStudentCatalogs, getStudentDetail } from "@/lib/admin/students"
 import { requireRole } from "@/lib/auth/require-role"
@@ -23,29 +33,67 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
   const query = await searchParams
   const returnTo = validReturnTo(query.returnTo)
   const accountHref = studentAccountHref(id, returnTo)
+  const activeTab = query.tab === "enrollment" || query.tab === "academic" || query.tab === "family" ? query.tab : "summary"
   const { roles, supabase, userId } = await requireRole(["MASTER", "ADMINISTRATIVO"])
   const { catalogs, error: catalogsError } = await getStudentCatalogs(supabase)
 
   if (catalogsError) return <StudentDetailLoadError />
+
+  const operationalCycleId = catalogs?.operationalCycle?.id
 
   const [
     { data: student, error },
     accountSummaryResult,
     chargeBalancesResult,
     paymentContextResult,
+    enrollmentResult,
+    tenPaymentPlansResult,
+    financialCoverageResult,
+    discountCategoriesResult,
+    groupsResult,
   ] = await Promise.all([
-    getStudentDetail(supabase, id, catalogs?.operationalCycle?.id),
+    getStudentDetail(supabase, id, operationalCycleId),
     getStudentAccountSummary(supabase, id),
     getStudentChargeBalances(supabase, id),
     getPaymentFormContext(supabase, userId),
+    operationalCycleId
+      ? getEnrollments(supabase, { cycleId: operationalCycleId, studentId: id })
+      : Promise.resolve({ data: [], error: false }),
+    operationalCycleId
+      ? getTenPaymentPlans(supabase)
+      : Promise.resolve({ data: [], error: false }),
+    operationalCycleId
+      ? getEnrollmentFinancialCoverage(supabase)
+      : Promise.resolve({ data: [], error: false }),
+    operationalCycleId
+      ? getTuitionDiscountCategories(supabase, operationalCycleId)
+      : Promise.resolve({ data: [], error: false }),
+    operationalCycleId
+      ? supabase
+          .from("groups")
+          .select("id, name, code, cycle_id, grade_level_id")
+          .eq("cycle_id", operationalCycleId)
+          .eq("is_active", true)
+          .order("name")
+      : Promise.resolve({ data: [], error: null }),
   ])
 
   if (error) return <StudentDetailLoadError />
   if (!student) notFound()
 
-  const enrollment = student.enrollment
+  const actionEnrollment = enrollmentResult.data[0] ?? null
+  const enrollment = actionEnrollment ?? student.enrollment
+  const schoolActionsAvailable = Boolean(
+    actionEnrollment && !groupsResult.error
+  )
+  const financialActionsAvailable = Boolean(
+    actionEnrollment &&
+      !tenPaymentPlansResult.error &&
+      !financialCoverageResult.error &&
+      !discountCategoriesResult.error
+  )
   const studentContext = enrollment
-    ? `${enrollment.gradeLevel.name}${enrollment.group ? ` · ${enrollment.group.name}` : ""}`
+    ? `${enrollment.gradeLevel.name}${enrollment.group ? ` · ${getEnrollmentGroupLabel(enrollment.group)}` : ""}`
     : "Sin matrícula en el ciclo operativo"
 
   return (
@@ -92,21 +140,41 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
 
       <nav aria-label="Secciones del alumno" className="overflow-x-auto border-b border-border">
         <div className="flex min-w-max gap-5">
-          <span className="border-b-2 border-foreground px-1 pb-3 text-sm font-medium">Resumen</span>
+          <Link
+            href={studentTabHref(id, returnTo, "summary")}
+            className={activeTab === "summary" ? "border-b-2 border-foreground px-1 pb-3 text-sm font-medium" : "px-1 pb-3 text-sm text-muted-foreground hover:text-foreground"}
+          >
+            Resumen
+          </Link>
           <Link
             href={accountHref}
             className="px-1 pb-3 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
             Cuenta
           </Link>
-          <span className="px-1 pb-3 text-sm text-muted-foreground">Matrícula</span>
-          <span className="px-1 pb-3 text-sm text-muted-foreground">Académico</span>
-          <span className="px-1 pb-3 text-sm text-muted-foreground">Familia</span>
+          <Link
+            href={studentTabHref(id, returnTo, "enrollment")}
+            className={activeTab === "enrollment" ? "border-b-2 border-foreground px-1 pb-3 text-sm font-medium" : "px-1 pb-3 text-sm text-muted-foreground hover:text-foreground"}
+          >
+            Matrícula
+          </Link>
+          <Link
+            href={studentTabHref(id, returnTo, "academic")}
+            className={activeTab === "academic" ? "border-b-2 border-foreground px-1 pb-3 text-sm font-medium" : "px-1 pb-3 text-sm text-muted-foreground hover:text-foreground"}
+          >
+            Académico
+          </Link>
+          <Link
+            href={studentTabHref(id, returnTo, "family")}
+            className={activeTab === "family" ? "border-b-2 border-foreground px-1 pb-3 text-sm font-medium" : "px-1 pb-3 text-sm text-muted-foreground hover:text-foreground"}
+          >
+            Familia
+          </Link>
         </div>
       </nav>
 
       <div className="grid gap-7 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,.8fr)]">
-        <aside className="order-first space-y-7 xl:order-none xl:col-start-2">
+        <aside className={activeTab === "summary" ? "hidden" : "order-first space-y-7 xl:order-none xl:col-start-2"}>
           <SummarySection title="Cuenta">
             {accountSummaryResult.error || !accountSummaryResult.data ? (
               <AccountLoadError studentId={student.id} />
@@ -125,28 +193,114 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
 
         </aside>
 
-        <div className="order-last space-y-7 xl:order-none xl:col-start-1 xl:row-start-1">
-          <SummarySection title="Matrícula actual">
-            {enrollment ? (
+        {activeTab === "summary" ? <div className="order-last space-y-7 xl:order-none xl:col-start-1 xl:row-start-1">
+          <SummarySection title="Datos básicos" action={<EditStudentBasicsSheet student={{ id: student.id, fullName: student.fullName, birthDate: student.birthDate, sex: student.sex }} />}>
+            <dl className="grid gap-4 sm:grid-cols-2">
+              <Detail label="Fecha de nacimiento" value={student.birthDate ? formatDate(student.birthDate) : "Sin especificar"} />
+              <Detail label="Sexo" value={student.sex === "H" ? "Hombre" : student.sex === "M" ? "Mujer" : "Sin especificar"} />
+            </dl>
+          </SummarySection>
+
+          <SummarySection title="Situación escolar">
+            {enrollment ? <dl className="grid gap-4 sm:grid-cols-2">
+              <Detail label="Ciclo" value={enrollment.cycle.name} />
+              <Detail label="Estado" value={formatEnrollmentStatus(enrollment.status)} />
+              <Detail label="Nivel" value={enrollment.educationLevel.name} />
+              <Detail label="Grado" value={enrollment.gradeLevel.name} />
+              <Detail label="Grupo" value={enrollment.group ? getEnrollmentGroupLabel(enrollment.group) : "Sin grupo asignado"} />
+              <Detail label="Clasificación" value={enrollment.classification.name} />
+            </dl> : <p className="text-sm text-muted-foreground">Este alumno no tiene una matrícula en el ciclo operativo actual.</p>}
+          </SummarySection>
+
+          <SummarySection title="Situación financiera">
+            {accountSummaryResult.error || !accountSummaryResult.data ? <p className="text-sm text-muted-foreground">No pudimos cargar el resumen financiero.</p> : <>
               <dl className="grid gap-4 sm:grid-cols-2">
-                <Detail label="Ciclo" value={enrollment.cycle.name} />
-                <Detail label="Estado" value={formatEnrollmentStatus(enrollment.status)} />
-                <Detail label="Nivel" value={enrollment.educationLevel.name} />
-                <Detail label="Grado" value={enrollment.gradeLevel.name} />
-                <Detail label="Grupo" value={enrollment.group?.name ?? "Sin grupo asignado"} />
-                <Detail label="Clasificación" value={enrollment.classification.name} />
-                <Detail label="Fecha de matrícula" value={formatDate(enrollment.enrolledOn)} />
-                <Detail
-                  label="Inicio de clases"
-                  value={enrollment.classesStartOn ? formatDate(enrollment.classesStartOn) : "Sin fecha registrada"}
-                />
+                <Detail label="Estado" value={accountSummaryResult.data.isCurrent ? "Al corriente" : "Con saldo vencido"} />
+                <Detail label="Saldo vencido" value={formatCurrency(Number(accountSummaryResult.data.overdueTotal))} />
+                {Number(accountSummaryResult.data.availableCredit) > 0 && <Detail label="Saldo a favor" value={formatCurrency(Number(accountSummaryResult.data.availableCredit))} />}
               </dl>
+              <Link href={accountHref} className="mt-5 inline-flex min-h-9 items-center text-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">Ver estado de cuenta</Link>
+            </>}
+          </SummarySection>
+
+          <SummarySection title="Familia">
+            <dl className="grid gap-4 sm:grid-cols-2">
+              <Detail label="Tutores registrados" value={String(student.guardians.length)} />
+              <Detail label="Accesos familiares activos" value={String(student.familyAccess.filter((access) => access.status === "ACTIVE").length)} />
+            </dl>
+          </SummarySection>
+        </div> : activeTab === "enrollment" ? <div className="order-last space-y-7 xl:order-none xl:col-start-1 xl:row-start-1">
+          <SummarySection title="Datos escolares">
+            {enrollment ? (
+              <>
+                <dl className="grid gap-4 sm:grid-cols-2">
+                  <Detail label="Ciclo" value={enrollment.cycle.name} />
+                  <Detail label="Estado" value={formatEnrollmentStatus(enrollment.status)} />
+                  <Detail label="Nivel" value={enrollment.educationLevel.name} />
+                  <Detail label="Grado" value={enrollment.gradeLevel.name} />
+                  <Detail label="Grupo" value={enrollment.group ? getEnrollmentGroupLabel(enrollment.group) : "Sin grupo asignado"} />
+                  <Detail label="Clasificación" value={enrollment.classification.name} />
+                  <Detail label="Fecha de matrícula" value={formatDate(enrollment.enrolledOn)} />
+                  <Detail
+                    label="Inicio de clases"
+                    value={enrollment.classesStartOn ? formatDate(enrollment.classesStartOn) : "Sin fecha registrada"}
+                  />
+                  {actionEnrollment && <Detail
+                    label="Inicio financiero"
+                    value={actionEnrollment.economicStartOn ? formatDate(actionEnrollment.economicStartOn) : "Sin fecha registrada"}
+                  />}
+                  {actionEnrollment?.closedOn && <Detail label="Fecha de cierre" value={formatDate(actionEnrollment.closedOn)} />}
+                </dl>
+                {schoolActionsAvailable && actionEnrollment && (
+                  <EnrollmentActions
+                    section="school"
+                    enrollment={actionEnrollment}
+                    groups={groupsResult.data ?? []}
+                    classifications={catalogs?.classifications ?? []}
+                    tenPaymentPlans={tenPaymentPlansResult.data}
+                    financialCoverage={financialCoverageResult.data}
+                    discountCategories={discountCategoriesResult.data}
+                  />
+                )}
+              </>
             ) : (
               <p className="text-sm text-muted-foreground">
                 Este alumno no tiene una matrícula en el ciclo operativo actual.
               </p>
             )}
           </SummarySection>
+
+          {actionEnrollment && <SummarySection title="Configuración financiera">
+            <dl className="grid gap-4 sm:grid-cols-2">
+              <Detail
+                label="Plan"
+                value={actionEnrollment.currentPlan ? `${actionEnrollment.currentPlan.installmentCount} pagos` : "Sin plan asignado"}
+              />
+              <Detail
+                label="Colegiatura acordada"
+                value={actionEnrollment.currentTuition ? formatCurrency(actionEnrollment.currentTuition.agreedAmount) : "Sin dato"}
+              />
+              <Detail
+                label="Descuento"
+                value={actionEnrollment.currentDiscount?.name ?? "Sin descuento asignado"}
+              />
+              <Detail
+                label="Inicio financiero"
+                value={actionEnrollment.economicStartOn ? formatDate(actionEnrollment.economicStartOn) : "Sin fecha registrada"}
+              />
+            </dl>
+            {financialActionsAvailable && (
+              <EnrollmentActions
+                section="financial"
+                enrollment={actionEnrollment}
+                groups={groupsResult.data ?? []}
+                classifications={catalogs?.classifications ?? []}
+                tenPaymentPlans={tenPaymentPlansResult.data}
+                financialCoverage={financialCoverageResult.data}
+                discountCategories={discountCategoriesResult.data}
+              />
+            )}
+          </SummarySection>}
 
           <SummarySection title="Tutores">
             {student.guardians.length ? (
@@ -162,15 +316,63 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
               <p className="text-sm text-muted-foreground">No hay tutores activos registrados.</p>
             )}
           </SummarySection>
-        </div>
-
-        <aside className="order-last space-y-7 xl:order-none xl:col-start-2 xl:row-start-2">
+        </div> : activeTab === "academic" ? <div className="order-last space-y-7 xl:order-none xl:col-start-1 xl:row-start-1">
           <SummarySection title="Académico">
-            <p className="text-sm text-muted-foreground">
-              El resumen académico estará disponible próximamente.
+            <p className="text-sm font-medium">Próximamente</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Las calificaciones estarán disponibles cuando se habilite el módulo académico.
             </p>
           </SummarySection>
+        </div> : <div className="order-last space-y-7 xl:order-none xl:col-start-1 xl:col-start-1 xl:row-start-1">
+          <SummarySection title="Tutores">
+            {student.guardians.length ? (
+              <>
+                <div className="divide-y divide-border">
+                  {student.guardians.map((guardian) => (
+                    <div key={`${guardian.fullName}-${guardian.relationship}`} className="py-3 first:pt-0 last:pb-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{guardian.fullName}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">{guardian.relationship}</p>
+                          {guardian.phone && <p className="mt-1 text-sm text-muted-foreground">{guardian.phone}</p>}
+                          {guardian.email && <p className="mt-1 break-words text-sm text-muted-foreground">{guardian.email}</p>}
+                        </div>
+                        <EditGuardianSheet studentId={student.id} guardian={guardian} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4"><AddGuardianSheet studentId={student.id} /></div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">No hay tutores registrados.</p>
+                <div className="mt-4"><AddGuardianSheet studentId={student.id} /></div>
+              </>
+            )}
+          </SummarySection>
 
+          <SummarySection title="Acceso familiar">
+            {student.familyAccess.length ? (
+              <div className="divide-y divide-border">
+                {student.familyAccess.map((access) => (
+                  <div key={`${access.guardianName}-${access.status}`} className="py-3 first:pt-0 last:pb-0">
+                    <p className="text-sm font-medium">{access.guardianName}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {access.status === "ACTIVE" ? "Acceso activo" : "Acceso inactivo"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Este alumno todavía no tiene cuentas familiares vinculadas.
+              </p>
+            )}
+          </SummarySection>
+        </div>}
+
+        <aside className={activeTab === "summary" ? "hidden" : "order-last space-y-7 xl:order-none xl:col-start-2 xl:row-start-2"}>
           <SummarySection title="Datos del alumno">
             <dl className="space-y-4">
               {student.studentCode && <Detail label="Código" value={student.studentCode} />}
@@ -195,6 +397,14 @@ function validReturnTo(value: string | string[] | undefined) {
 function studentAccountHref(studentId: string, returnTo: string) {
   if (returnTo === "/admin/alumnos") return `/admin/alumnos/${studentId}/cuenta`
   return `/admin/alumnos/${studentId}/cuenta?returnTo=${encodeURIComponent(returnTo)}`
+}
+
+function studentTabHref(studentId: string, returnTo: string, tab: "summary" | "enrollment" | "academic" | "family") {
+  const params = new URLSearchParams()
+  if (tab !== "summary") params.set("tab", tab)
+  if (returnTo !== "/admin/alumnos") params.set("returnTo", returnTo)
+  const query = params.toString()
+  return `/admin/alumnos/${studentId}${query ? `?${query}` : ""}`
 }
 
 function paymentUnavailableReason(
@@ -228,10 +438,13 @@ function AccountLoadError({ studentId }: { studentId: string }) {
   )
 }
 
-function SummarySection({ title, children }: { title: string; children: React.ReactNode }) {
+function SummarySection({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="border-y border-border bg-white px-4 py-5 sm:rounded-xl sm:border">
-      <h2 className="text-base font-semibold">{title}</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-base font-semibold">{title}</h2>
+        {action}
+      </div>
       <div className="mt-4">{children}</div>
     </section>
   )
@@ -264,4 +477,11 @@ function formatDate(value: string) {
     month: "short",
     year: "numeric",
   }).format(new Date(`${value}T12:00:00`))
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+  }).format(value)
 }

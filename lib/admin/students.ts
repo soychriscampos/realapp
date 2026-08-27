@@ -33,8 +33,21 @@ export type StudentDetail = {
   fullName: string
   studentCode: string | null
   birthDate: string | null
+  sex: string | null
   enrollment: StudentListItem["enrollment"] | null
-  guardians: Array<{ fullName: string; relationship: string }>
+  guardians: Array<{
+    guardianId: string
+    fullName: string
+    relationship: string
+    phone: string | null
+    email: string | null
+    viaEmail: boolean
+    viaWhatsapp: boolean
+  }>
+  familyAccess: Array<{
+    guardianName: string
+    status: "ACTIVE" | "REVOKED"
+  }>
 }
 
 export type StudentSearchResult = {
@@ -247,14 +260,14 @@ export async function getStudentDetail(
 ): Promise<{ data: StudentDetail | null; error: boolean }> {
   const { data: student, error: studentError } = await supabase
     .from("students")
-    .select("id, full_name, student_code, birth_date")
+    .select("id, full_name, student_code, birth_date, sex")
     .eq("id", studentId)
     .maybeSingle()
 
   if (studentError) return { data: null, error: true }
   if (!student) return { data: null, error: false }
 
-  const [enrollmentResult, guardiansResult] = await Promise.all([
+  const [enrollmentResult, guardiansResult, familyAccessResult] = await Promise.all([
     cycleId
       ? supabase
           .from("enrollments")
@@ -267,13 +280,18 @@ export async function getStudentDetail(
       : Promise.resolve({ data: null, error: null }),
     supabase
       .from("student_guardians")
-      .select("relationship, priority, guardians!inner(full_name)")
+      .select("guardian_id, relationship, priority, via_email, via_whatsapp, guardians!inner(full_name, phone, email)")
       .eq("student_id", studentId)
       .eq("is_active", true)
       .order("priority"),
+    supabase
+      .from("family_access")
+      .select("status, guardians!inner(full_name)")
+      .eq("student_id", studentId)
+      .order("granted_at", { ascending: false }),
   ])
 
-  if (enrollmentResult.error || guardiansResult.error) {
+  if (enrollmentResult.error || guardiansResult.error || familyAccessResult.error) {
     return { data: null, error: true }
   }
 
@@ -287,15 +305,28 @@ export async function getStudentDetail(
       fullName: asText(student.full_name),
       studentCode: typeof student.student_code === "string" ? student.student_code : null,
       birthDate: typeof student.birth_date === "string" ? student.birth_date : null,
+      sex: typeof student.sex === "string" ? student.sex : null,
       enrollment,
       guardians: (guardiansResult.data ?? []).flatMap((row) => {
         const guardian = asRecord(row.guardians)
         if (!guardian) return []
 
         return [{
+          guardianId: asText(row.guardian_id),
           fullName: asText(guardian.full_name),
           relationship: asText(row.relationship),
+          phone: typeof guardian.phone === "string" && guardian.phone.trim() ? guardian.phone : null,
+          email: typeof guardian.email === "string" && guardian.email.trim() ? guardian.email : null,
+          viaEmail: row.via_email === true,
+          viaWhatsapp: row.via_whatsapp === true,
         }]
+      }),
+      familyAccess: (familyAccessResult.data ?? []).flatMap((row) => {
+        const guardian = asRecord(row.guardians)
+        const status = row.status === "ACTIVE" || row.status === "REVOKED" ? row.status : null
+        if (!guardian || !status) return []
+
+        return [{ guardianName: asText(guardian.full_name), status }]
       }),
     },
     error: false,

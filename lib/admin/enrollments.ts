@@ -4,6 +4,7 @@ import { buildStudentNameSearchPattern } from "@/lib/admin/students"
 
 export type EnrollmentFilters = {
   cycleId: string
+  studentId?: string
   query?: string
   educationLevelId?: string
   gradeLevelId?: string
@@ -77,6 +78,8 @@ export async function getEnrollments(
     .order("enrolled_on", { ascending: false })
     .order("full_name", { referencedTable: "students", ascending: true })
     .limit(100)
+
+  if (filters.studentId) query = query.eq("student_id", filters.studentId)
 
   if (filters.query) {
     query = query.filter(
@@ -213,6 +216,20 @@ export function getEnrollmentGroupLabel(group: { name: string; code: string }) {
   const source = group.code.trim() || group.name.trim()
   const match = source.match(/[\p{L}\d]\s*$/u)
   return match?.[0]?.trim().toUpperCase() ?? source
+}
+
+export function formatEnrollmentStatus(status: string) {
+  const labels: Record<string, string> = {
+    PREINSCRITA: "Preinscrita",
+    PENDIENTE: "Pendiente",
+    ACTIVA: "Activa",
+    BAJA: "Baja",
+    FINALIZADA: "Finalizada",
+    NO_CONTINUA: "No continúa",
+    EGRESADA: "Egresada",
+  }
+
+  return labels[status] ?? status
 }
 
 export async function getEnrollmentFinancialCoverage(

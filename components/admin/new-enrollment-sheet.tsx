@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { getEnrollmentGroupLabel, type EnrollmentFinancialCoverage } from "@/lib/admin/enrollments"
+import { GUARDIAN_RELATIONSHIPS, isGuardianRelationship } from "@/lib/admin/guardian-relationships"
 import type { PaymentFormContext } from "@/lib/admin/payments"
 import type { StudentChargeBalance } from "@/lib/admin/student-account"
 import { calculateTuitionDiscountPreview, formatCurrency, formatTuitionDiscountValue, tuitionDiscountTypeLabel } from "@/lib/admin/tuition-discount-preview"
@@ -63,6 +64,7 @@ export function NewEnrollmentSheet({
   const [studentSex, setStudentSex] = useState<"H" | "M">("H")
   const [studentBirthDate, setStudentBirthDate] = useState("")
   const [contacts, setContacts] = useState<Contact[]>([{ full_name: "", relationship: "", phone: "", email: "" }])
+  const [contactOtherRelationships, setContactOtherRelationships] = useState<Record<number, string>>({})
   const [cycleId, setCycleId] = useState(operationalCycleId ?? cycles[0]?.id ?? "")
   const [educationLevelId, setEducationLevelId] = useState("")
   const [gradeLevelId, setGradeLevelId] = useState("")
@@ -256,7 +258,10 @@ export function NewEnrollmentSheet({
           studentFullName,
           studentSex,
           studentBirthDate,
-          contacts,
+          contacts: contacts.map((contact, index) => ({
+            ...contact,
+            relationship: contact.relationship === "Otro" ? contactOtherRelationships[index]?.trim() ?? "" : contact.relationship,
+          })),
           cycleId,
           gradeLevelId,
           groupId: groupId || null,
@@ -327,7 +332,7 @@ export function NewEnrollmentSheet({
       if (newStudentMode) {
         if (!studentFullName.trim()) return "Indica el nombre completo del alumno."
         if (!studentBirthDate) return "Captura la fecha de nacimiento del alumno."
-        if (contacts.length < 1 || contacts.some((contact) => !contact.full_name.trim() || !contact.relationship.trim() || !contact.phone.trim())) {
+        if (contacts.length < 1 || contacts.some((contact, index) => !contact.full_name.trim() || !contact.relationship.trim() || (contact.relationship === "Otro" && !contactOtherRelationships[index]?.trim()) || !contact.phone.trim())) {
           return "Completa nombre, parentesco y teléfono del contacto principal."
         }
       } else if (!student) {
@@ -374,6 +379,7 @@ export function NewEnrollmentSheet({
     setStudentSex("H")
     setStudentBirthDate("")
     setContacts([{ full_name: "", relationship: "", phone: "", email: "" }])
+    setContactOtherRelationships({})
     setEducationLevelId("")
     setGradeLevelId("")
     setGroupId("")
@@ -432,7 +438,7 @@ export function NewEnrollmentSheet({
                   <div className="space-y-4">
                     <Field label="Nombre completo"><Input value={studentFullName} onChange={(event) => setStudentFullName(event.target.value)} placeholder="Nombre y apellidos" /></Field>
                     <div className="grid gap-4 sm:grid-cols-2"><Field label="Sexo"><select value={studentSex} onChange={(event) => setStudentSex(event.target.value as "H" | "M")} className={selectClass}><option value="H">H</option><option value="M">M</option></select></Field><Field label="Fecha de nacimiento"><Input type="date" value={studentBirthDate} onChange={(event) => setStudentBirthDate(event.target.value)} /></Field></div>
-                    <div className="space-y-3"><div><h3 className="text-sm font-semibold">Contactos</h3><p className="mt-1 text-sm text-muted-foreground">Agrega al menos un contacto. Puedes agregar un segundo.</p></div>{contacts.map((contact, index) => <div key={index} className="space-y-3 rounded-lg border border-border p-4"><p className="text-sm font-medium">Contacto {index + 1}</p><Field label="Nombre completo"><Input value={contact.full_name} onChange={(event) => updateContact(index, "full_name", event.target.value)} /></Field><div className="grid gap-3 sm:grid-cols-2"><Field label="Parentesco"><Input value={contact.relationship} onChange={(event) => updateContact(index, "relationship", event.target.value)} placeholder="Madre, padre..." /></Field><Field label="Teléfono"><Input value={contact.phone} onChange={(event) => updateContact(index, "phone", event.target.value)} /></Field></div><Field label="Email (opcional)"><Input type="email" value={contact.email} onChange={(event) => updateContact(index, "email", event.target.value)} /></Field>{index === 1 && <Button type="button" variant="ghost" size="sm" onClick={() => setContacts((current) => current.slice(0, 1))}>Quitar contacto</Button>}</div>)}{contacts.length < 2 && <Button type="button" variant="outline" onClick={() => setContacts((current) => [...current, { full_name: "", relationship: "", phone: "", email: "" }])}><Plus /> Agregar contacto</Button>}</div>
+                    <div className="space-y-3"><div><h3 className="text-sm font-semibold">Contactos</h3><p className="mt-1 text-sm text-muted-foreground">Agrega al menos un contacto. Puedes agregar un segundo.</p></div>{contacts.map((contact, index) => { const relationshipValue = isGuardianRelationship(contact.relationship) ? contact.relationship : contact.relationship ? "Otro" : ""; return <div key={index} className="space-y-3 rounded-lg border border-border p-4"><p className="text-sm font-medium">Contacto {index + 1}</p><Field label="Nombre completo"><Input value={contact.full_name} onChange={(event) => updateContact(index, "full_name", event.target.value)} /></Field><div className="grid gap-3 sm:grid-cols-2"><Field label="Parentesco"><select value={relationshipValue} onChange={(event) => { const value = event.target.value; updateContact(index, "relationship", value === "Otro" ? "Otro" : value); setContactOtherRelationships((current) => ({ ...current, [index]: value === "Otro" ? current[index] ?? "" : "" })) }} className={selectClass}><option value="">Selecciona un parentesco</option>{GUARDIAN_RELATIONSHIPS.map((relationship) => <option key={relationship} value={relationship}>{relationship}</option>)}</select></Field><Field label="Teléfono"><Input value={contact.phone} onChange={(event) => updateContact(index, "phone", event.target.value)} /></Field></div>{relationshipValue === "Otro" && <Field label="Especificar parentesco"><Input value={contactOtherRelationships[index] ?? (contact.relationship === "Otro" ? "" : contact.relationship)} onChange={(event) => { setContactOtherRelationships((current) => ({ ...current, [index]: event.target.value })); updateContact(index, "relationship", "Otro") }} /></Field>}<Field label="Email (opcional)"><Input type="email" value={contact.email} onChange={(event) => updateContact(index, "email", event.target.value)} /></Field>{index === 1 && <Button type="button" variant="ghost" size="sm" onClick={() => setContacts((current) => current.slice(0, 1))}>Quitar contacto</Button>}</div>})}{contacts.length < 2 && <Button type="button" variant="outline" onClick={() => setContacts((current) => [...current, { full_name: "", relationship: "", phone: "", email: "" }])}><Plus /> Agregar contacto</Button>}</div>
                   </div>
                 ) : student ? (
                   <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">

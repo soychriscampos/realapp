@@ -1,25 +1,15 @@
+"use client"
+
 import { ChevronRight } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
-import { EnrollmentActions } from "@/components/admin/enrollment-actions"
-import { formatEnrollmentStatus } from "@/components/admin/student-list"
-import type { TuitionDiscountCategory } from "@/lib/admin/discount-categories"
-import { getEnrollmentGroupLabel, type EnrollmentFinancialCoverage, type EnrollmentListItem, type FinancialPlanOption } from "@/lib/admin/enrollments"
+import { formatEnrollmentStatus, getEnrollmentGroupLabel, type EnrollmentListItem } from "@/lib/admin/enrollments"
 
 export function EnrollmentList({
   enrollments,
-  groups,
-  classifications,
-  tenPaymentPlans,
-  financialCoverage,
-  discountCategories,
 }: {
   enrollments: EnrollmentListItem[]
-  groups: Array<{ id: string; name: string; code: string; cycle_id: string; grade_level_id: string }>
-  classifications: Array<{ id: string; name: string }>
-  tenPaymentPlans: FinancialPlanOption[]
-  financialCoverage: EnrollmentFinancialCoverage[]
-  discountCategories: TuitionDiscountCategory[]
 }) {
   if (!enrollments.length) {
     return (
@@ -51,7 +41,6 @@ export function EnrollmentList({
               </span>
               <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
             </Link>
-            <EnrollmentActions enrollment={enrollment} groups={groups} classifications={classifications} tenPaymentPlans={tenPaymentPlans} financialCoverage={financialCoverage} discountCategories={discountCategories} />
           </div>
         ))}
       </div>
@@ -64,45 +53,41 @@ export function EnrollmentList({
               <th className="px-4 py-3">Nivel / grado</th>
               <th className="px-4 py-3">Grupo</th>
               <th className="px-4 py-3">Estado</th>
-              <th className="w-24 px-4 py-3"><span className="sr-only">Acciones</span></th>
+              <th className="w-10 px-4 py-3"><span className="sr-only">Abrir ficha</span></th>
             </tr>
           </thead>
           <tbody>
             {enrollments.map((enrollment) => (
-              <tr key={enrollment.id} className="border-b border-border last:border-b-0 hover:bg-muted/60">
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/admin/alumnos/${enrollment.student.id}`}
-                    className="font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                  >
-                    {enrollment.student.fullName}
-                  </Link>
-                  {enrollment.student.studentCode && (
-                    <span className="mt-0.5 block text-xs text-muted-foreground">{enrollment.student.studentCode}</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {enrollment.educationLevel.name} · {enrollment.gradeLevel.name}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">{enrollment.group ? getEnrollmentGroupLabel(enrollment.group) : "Sin grupo"}</td>
-                <td className="px-4 py-3">{formatEnrollmentStatus(enrollment.status)}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-1">
-                    <Link
-                      href={`/admin/alumnos/${enrollment.student.id}`}
-                      aria-label={`Abrir ficha de ${enrollment.student.fullName}`}
-                      className="flex size-8 items-center justify-center rounded-lg text-muted-foreground outline-none hover:bg-background hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-                    >
-                      <ChevronRight className="size-4" />
-                    </Link>
-                    <EnrollmentActions enrollment={enrollment} groups={groups} classifications={classifications} tenPaymentPlans={tenPaymentPlans} financialCoverage={financialCoverage} discountCategories={discountCategories} />
-                  </div>
-                </td>
-              </tr>
+              <EnrollmentDesktopRow key={enrollment.id} enrollment={enrollment} />
             ))}
           </tbody>
         </table>
       </div>
     </>
+  )
+}
+
+function EnrollmentDesktopRow({ enrollment }: { enrollment: EnrollmentListItem }) {
+  const router = useRouter()
+  const href = `/admin/alumnos/${enrollment.student.id}`
+
+  return (
+    <tr
+      className="cursor-pointer border-b border-border last:border-b-0 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
+      onClick={() => router.push(href)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          router.push(href)
+        }
+      }}
+      tabIndex={0}
+    >
+      <td className="px-4 py-3"><span className="font-medium">{enrollment.student.fullName}</span>{enrollment.student.studentCode && <span className="mt-0.5 block text-xs text-muted-foreground">{enrollment.student.studentCode}</span>}</td>
+      <td className="px-4 py-3 text-muted-foreground">{enrollment.educationLevel.name} · {enrollment.gradeLevel.name}</td>
+      <td className="px-4 py-3 text-muted-foreground">{enrollment.group ? getEnrollmentGroupLabel(enrollment.group) : "Sin grupo"}</td>
+      <td className="px-4 py-3">{formatEnrollmentStatus(enrollment.status)}</td>
+      <td className="px-4 py-3"><ChevronRight className="size-4 text-muted-foreground" /></td>
+    </tr>
   )
 }

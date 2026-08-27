@@ -1,6 +1,10 @@
+"use client"
+
 import { ChevronRight } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
+import { formatEnrollmentStatus, getEnrollmentGroupLabel } from "@/lib/admin/enrollments"
 import type { StudentListItem } from "@/lib/admin/students"
 
 export function StudentList({ students }: { students: StudentListItem[] }) {
@@ -28,6 +32,7 @@ export function StudentList({ students }: { students: StudentListItem[] }) {
           <thead className="border-b border-border bg-muted/40 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-4 py-3">Alumno</th>
+              <th className="px-4 py-3">Nivel</th>
               <th className="px-4 py-3">Grado / grupo</th>
               <th className="px-4 py-3">Estado</th>
               <th className="w-10 px-4 py-3"><span className="sr-only">Abrir</span></th>
@@ -35,40 +40,7 @@ export function StudentList({ students }: { students: StudentListItem[] }) {
           </thead>
           <tbody>
             {students.map((student) => (
-              <tr key={student.id} className="border-b border-border last:border-b-0 hover:bg-muted/60">
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/admin/alumnos/${student.id}`}
-                    className="font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                  >
-                    {student.fullName}
-                  </Link>
-                  {student.studentCode && (
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      {student.studentCode}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {student.enrollment
-                    ? `${student.enrollment.gradeLevel.name}${student.enrollment.group ? ` · ${student.enrollment.group.name}` : ""}`
-                    : "Sin matrícula actual"}
-                </td>
-                <td className="px-4 py-3">
-                  {student.enrollment
-                    ? formatEnrollmentStatus(student.enrollment.status)
-                    : "Sin matrícula actual"}
-                </td>
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/admin/alumnos/${student.id}`}
-                    aria-label={`Abrir ficha de ${student.fullName}`}
-                    className="flex size-8 items-center justify-center rounded-lg text-muted-foreground outline-none hover:bg-background hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-                  >
-                    <ChevronRight className="size-4" />
-                  </Link>
-                </td>
-              </tr>
+              <StudentDesktopRow key={student.id} student={student} />
             ))}
           </tbody>
         </table>
@@ -87,7 +59,7 @@ function StudentMobileRow({ student }: { student: StudentListItem }) {
         <span className="block truncate text-sm font-medium">{student.fullName}</span>
         <span className="mt-1 block truncate text-sm text-muted-foreground">
           {student.enrollment
-            ? `${student.enrollment.gradeLevel.name}${student.enrollment.group ? ` · ${student.enrollment.group.name}` : ""} · ${formatEnrollmentStatus(student.enrollment.status)}`
+            ? `${student.enrollment.educationLevel.name} · ${student.enrollment.gradeLevel.name}${student.enrollment.group ? ` · ${getEnrollmentGroupLabel(student.enrollment.group)}` : ""} · ${formatEnrollmentStatus(student.enrollment.status)}`
             : "Sin matrícula en el ciclo operativo"}
         </span>
       </span>
@@ -96,16 +68,31 @@ function StudentMobileRow({ student }: { student: StudentListItem }) {
   )
 }
 
-export function formatEnrollmentStatus(status: string) {
-  const labels: Record<string, string> = {
-    PREINSCRITA: "Preinscrita",
-    PENDIENTE: "Pendiente",
-    ACTIVA: "Activa",
-    BAJA: "Baja",
-    FINALIZADA: "Finalizada",
-    NO_CONTINUA: "No continúa",
-    EGRESADA: "Egresada",
-  }
+function StudentDesktopRow({ student }: { student: StudentListItem }) {
+  const router = useRouter()
+  const href = `/admin/alumnos/${student.id}`
+  const open = () => router.push(href)
 
-  return labels[status] ?? status
+  return (
+    <tr
+      className="cursor-pointer border-b border-border last:border-b-0 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
+      onClick={open}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          open()
+        }
+      }}
+      tabIndex={0}
+    >
+      <td className="px-4 py-3">
+        <span className="font-medium">{student.fullName}</span>
+        {student.studentCode && <span className="mt-0.5 block text-xs text-muted-foreground">{student.studentCode}</span>}
+      </td>
+      <td className="px-4 py-3 text-muted-foreground">{student.enrollment?.educationLevel.name ?? "Sin matrícula actual"}</td>
+      <td className="px-4 py-3 text-muted-foreground">{student.enrollment ? `${student.enrollment.gradeLevel.name}${student.enrollment.group ? ` · ${getEnrollmentGroupLabel(student.enrollment.group)}` : ""}` : "Sin matrícula actual"}</td>
+      <td className="px-4 py-3">{student.enrollment ? formatEnrollmentStatus(student.enrollment.status) : "Sin matrícula actual"}</td>
+      <td className="px-4 py-3"><ChevronRight className="size-4 text-muted-foreground" /></td>
+    </tr>
+  )
 }

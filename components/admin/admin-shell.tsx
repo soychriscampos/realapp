@@ -6,7 +6,6 @@ import {
   Banknote,
   BarChart3,
   ChevronRight,
-  GraduationCap,
   Home,
   LogOut,
   MenuIcon,
@@ -33,7 +32,6 @@ type AdminShellProps = {
 const primaryNavigation = [
   { label: "Inicio", href: "/admin", icon: Home },
   { label: "Alumnos", href: "/admin/alumnos", icon: Users },
-  { label: "Matrícula", href: "/admin/matricula", icon: GraduationCap },
   { label: "Reportes", href: "/admin/reportes", icon: BarChart3 },
   { label: "Configuración", href: "/admin/configuracion", icon: Settings },
 ]
@@ -41,11 +39,10 @@ const primaryNavigation = [
 const mobileNavigation = [
   { label: "Inicio", href: "/admin", icon: Home },
   { label: "Alumnos", href: "/admin/alumnos", icon: Users },
-  { label: "Matrícula", href: "/admin/matricula", icon: GraduationCap },
 ]
 
 const moreNavigation = primaryNavigation.filter(
-  (item) => !["Inicio", "Alumnos", "Matrícula"].includes(item.label)
+  (item) => !["Inicio", "Alumnos"].includes(item.label)
 )
 
 export function AdminShell({ children, roleLabel }: AdminShellProps) {
@@ -74,15 +71,15 @@ export function AdminShell({ children, roleLabel }: AdminShellProps) {
             <NavigationGroup items={primaryNavigation.slice(0, 1)} />
             <NavigationGroup
               label="Gestión"
-              items={primaryNavigation.slice(1, 3)}
+              items={primaryNavigation.slice(1, 2)}
             />
             <NavigationGroup
               label="Operación"
-              items={primaryNavigation.slice(3, 4)}
+              items={primaryNavigation.slice(2, 3)}
             />
             <NavigationGroup
               label="Sistema"
-              items={primaryNavigation.slice(4)}
+              items={primaryNavigation.slice(3)}
             />
           </nav>
 
@@ -162,10 +159,11 @@ function NavigationItem({
   compact?: boolean
 }) {
   const pathname = usePathname()
-  const isActive =
-    item.href === "/admin"
-      ? pathname === item.href
-      : pathname.startsWith(item.href)
+  const isActive = item.href === "/admin"
+    ? pathname === item.href
+    : pathname.startsWith(item.href) || (
+      item.href === "/admin/alumnos" && pathname.startsWith("/admin/matricula")
+    )
   const Icon = item.icon
 
   return (

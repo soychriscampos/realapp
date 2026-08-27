@@ -41,6 +41,7 @@ type EnrollmentActionsProps = {
   tenPaymentPlans: FinancialPlanOption[]
   financialCoverage: EnrollmentFinancialCoverage[]
   discountCategories: TuitionDiscountCategory[]
+  section?: "menu" | "school" | "financial"
 }
 
 export function EnrollmentActions({
@@ -50,6 +51,7 @@ export function EnrollmentActions({
   tenPaymentPlans,
   financialCoverage,
   discountCategories,
+  section = "menu",
 }: EnrollmentActionsProps) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<ActionMode | null>(null)
@@ -486,7 +488,7 @@ export function EnrollmentActions({
 
   return (
     <Dialog.Root open={open} onOpenChange={(nextOpen) => nextOpen ? setOpen(true) : close()}>
-      <Menu.Root>
+      {section === "menu" ? <Menu.Root>
         <Menu.Trigger
           aria-label={`Acciones de matrícula de ${enrollment.student.fullName}`}
           disabled={!canChange}
@@ -513,7 +515,16 @@ export function EnrollmentActions({
             </Menu.Popup>
           </Menu.Positioner>
         </Menu.Portal>
-      </Menu.Root>
+      </Menu.Root> : <EnrollmentActionPanel
+        section={section}
+        enrollment={enrollment}
+        canChange={canChange}
+        planAvailable={planAvailable}
+        hasCompatibleGroups={compatibleGroups.length > 0}
+        hasAvailableClassifications={availableClassifications.length > 0}
+        canAssignDiscount={Boolean(enrollment.currentTuition && discountCategories.length)}
+        onOpenAction={openAction}
+      />}
 
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/25" />
@@ -554,6 +565,69 @@ export function EnrollmentActions({
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>
+  )
+}
+
+function EnrollmentActionPanel({
+  section,
+  enrollment,
+  canChange,
+  planAvailable,
+  hasCompatibleGroups,
+  hasAvailableClassifications,
+  canAssignDiscount,
+  onOpenAction,
+}: {
+  section: "school" | "financial"
+  enrollment: EnrollmentListItem
+  canChange: boolean
+  planAvailable: boolean
+  hasCompatibleGroups: boolean
+  hasAvailableClassifications: boolean
+  canAssignDiscount: boolean
+  onOpenAction: (mode: ActionMode) => Promise<void>
+}) {
+  if (!canChange) return null
+
+  if (section === "school") {
+    return (
+      <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
+        {enrollment.status !== "BAJA" && <>
+          <Button variant="outline" size="sm" disabled={!hasCompatibleGroups} onClick={() => void onOpenAction("group")}>
+            Cambiar grupo
+          </Button>
+          <Button variant="outline" size="sm" disabled={!hasAvailableClassifications} onClick={() => void onOpenAction("classification")}>
+            Cambiar clasificación
+          </Button>
+        </>}
+        {enrollment.status === "ACTIVA" && (
+          <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => void onOpenAction("withdrawal")}>
+            Dar de baja
+          </Button>
+        )}
+        {enrollment.status === "BAJA" && (
+          <Button variant="outline" size="sm" onClick={() => void onOpenAction("reactivation")}>
+            Reactivar
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  if (enrollment.status !== "ACTIVA") return null
+
+  return (
+    <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
+      <Button variant="outline" size="sm" disabled={!planAvailable} onClick={() => void onOpenAction("plan")}>
+        Cambiar plan
+      </Button>
+      <Button variant="outline" size="sm" disabled={!canAssignDiscount} onClick={() => void onOpenAction("discount")}>
+        {enrollment.currentDiscount ? "Modificar descuento" : "Asignar descuento"}
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => void onOpenAction("regularization")}>
+        Regularizar inicio financiero
+      </Button>
+    </div>
   )
 }
 

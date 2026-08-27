@@ -1,6 +1,7 @@
 import Link from "next/link"
 
 import { OverdueStudentsTable, type OverdueStudent } from "@/components/admin/overdue-students-table"
+import { StudentModuleNav } from "@/components/admin/student-module-nav"
 import { formatCurrency } from "@/lib/admin/student-account"
 import { getStudentCatalogs } from "@/lib/admin/students"
 import { createClient } from "@/lib/supabase/server"
@@ -43,6 +44,7 @@ export default async function OverdueStudentsPage({ searchParams }: OverduePageP
 
   return (
     <div className="space-y-7">
+      <StudentModuleNav />
       <header className="space-y-4">
         <div>
           <Link
