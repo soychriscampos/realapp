@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+
 import { Geist } from "next/font/google"
 
 import { cn } from "@/lib/utils"
@@ -13,6 +14,10 @@ const geist = Geist({
 export const metadata: Metadata = {
   title: "REAL",
   description: "Colegio REAL de Escuinapa",
+  robots: {
+    index: false,
+    follow: false,
+  },
 }
 
 export default function RootLayout({
