@@ -232,6 +232,7 @@ function situationsForCycle(cycleStatus: string | undefined, supportsContinuity:
 
   if (cycleStatus === "CLOSED") {
     return [
+      { id: "active", name: "Activa" },
       { id: "finalized", name: "Finalizada" },
       { id: "withdrawn", name: "Baja" },
       { id: "graduated", name: "Egresada" },

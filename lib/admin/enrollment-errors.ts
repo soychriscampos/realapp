@@ -1,4 +1,4 @@
-export type EnrollmentErrorContext = "activation" | "preregistration" | "plan" | "group" | "classification" | "withdrawal" | "reactivation" | "finalization" | "graduation" | "cycle_closure"
+export type EnrollmentErrorContext = "activation" | "preregistration" | "plan" | "group" | "classification" | "grade" | "dates" | "withdrawal" | "reactivation" | "finalization" | "graduation" | "cycle_closure"
 
 export function mapEnrollmentError(message: string | undefined, context: EnrollmentErrorContext) {
   const technicalMessage = message?.trim() ?? ""
@@ -78,6 +78,20 @@ export function mapEnrollmentError(message: string | undefined, context: Enrollm
       friendlyMessage = "La fecha efectiva debe estar dentro del ciclo escolar."
     } else if (isExclusionConstraint(normalized)) {
       friendlyMessage = `No se puede cambiar ${context === "group" ? "el grupo" : "la clasificación"} porque ya existe un registro equivalente.`
+    }
+  }
+
+  if (context === "grade" || context === "dates") {
+    if (normalized.includes("must belong to enrollment cycle") || normalized.includes("outside enrollment cycle")) {
+      friendlyMessage = "Las fechas deben estar dentro del ciclo escolar."
+    } else if (normalized.includes("grade") && (normalized.includes("not found") || normalized.includes("does not belong"))) {
+      friendlyMessage = "El grado seleccionado no es válido."
+    } else if (normalized.includes("group") && (normalized.includes("not found") || normalized.includes("does not belong"))) {
+      friendlyMessage = "El grupo seleccionado no corresponde al ciclo y grado."
+    } else if (normalized.includes("closed_on")) {
+      friendlyMessage = "La fecha de matrícula no puede ser posterior a la fecha de cierre."
+    } else if (normalized.includes("already has requested") || normalized.includes("no changes")) {
+      friendlyMessage = "No hay cambios que guardar."
     }
   }
 
@@ -162,6 +176,8 @@ export function mapEnrollmentError(message: string | undefined, context: Enrollm
           ? "No tienes autorización para finalizar las matrículas."
         : context === "graduation"
           ? "No tienes autorización para registrar el egreso."
+        : context === "grade" || context === "dates"
+          ? "No tienes autorización para corregir los datos académicos."
         : context === "cycle_closure"
           ? "No tienes autorización para cerrar el ciclo escolar."
         : context === "activation" || context === "preregistration"
@@ -182,6 +198,8 @@ function defaultMessage(context: EnrollmentErrorContext) {
   if (context === "plan") return "No pudimos cambiar el plan financiero. Revisa los datos e inténtalo de nuevo."
   if (context === "group") return "No pudimos cambiar el grupo. Revisa los datos e inténtalo de nuevo."
   if (context === "classification") return "No pudimos cambiar la clasificación. Revisa los datos e inténtalo de nuevo."
+  if (context === "grade") return "No pudimos corregir el grado. Revisa los datos e inténtalo de nuevo."
+  if (context === "dates") return "No pudimos corregir las fechas académicas. Revisa los datos e inténtalo de nuevo."
   if (context === "withdrawal") return "No pudimos completar la baja. Revisa los datos e inténtalo de nuevo."
   if (context === "finalization") return "No pudimos finalizar las matrículas. Revisa los datos e inténtalo de nuevo."
   if (context === "graduation") return "No pudimos registrar el egreso. Revisa los datos e inténtalo de nuevo."

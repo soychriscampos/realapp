@@ -78,7 +78,7 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
           options={availableGroups.map((group) => ({ ...group, name: getEnrollmentGroupLabel(group) }))}
           onChange={setGroupId}
         />
-        <FilterSelect label="Situación" name="situation" value={values.situation} options={situations} emptyLabel="Todas" />
+        <FilterSelect label="Matrícula" name="situation" value={values.situation} options={situations} emptyLabel="Todas" />
         <FilterSelect label="Clasificación" name="classification" value={values.classification} options={classifications} />
         <Button type="submit" variant="outline" className="h-10 bg-white"><Filter /> Aplicar</Button>
       </div>

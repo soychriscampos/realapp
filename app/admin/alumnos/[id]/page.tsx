@@ -3,7 +3,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { EnrollmentActions } from "@/components/admin/enrollment-actions"
-import { GraduateEnrollmentSheet } from "@/components/admin/graduate-enrollment-sheet"
+import { EnrollmentCycleSelect } from "@/components/admin/enrollment-cycle-select"
 import { AddGuardianSheet, EditGuardianSheet } from "@/components/admin/edit-guardian-sheet"
 import { EditStudentBasicsSheet } from "@/components/admin/edit-student-basics-sheet"
 import { AccountSummary } from "@/components/admin/student-account"
@@ -52,10 +52,6 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
     chargeBalancesResult,
     paymentContextResult,
     enrollmentResult,
-    tenPaymentPlansResult,
-    financialCoverageResult,
-    discountCategoriesResult,
-    groupsResult,
     accountResult,
     emailRecipientsResult,
   ] = await Promise.all([
@@ -66,23 +62,6 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
     operationalCycleId
       ? getEnrollments(supabase, { cycleId: operationalCycleId, studentId: id })
       : Promise.resolve({ data: [], error: false }),
-    operationalCycleId
-      ? getTenPaymentPlans(supabase)
-      : Promise.resolve({ data: [], error: false }),
-    operationalCycleId
-      ? getEnrollmentFinancialCoverage(supabase)
-      : Promise.resolve({ data: [], error: false }),
-    operationalCycleId
-      ? getTuitionDiscountCategories(supabase, operationalCycleId)
-      : Promise.resolve({ data: [], error: false }),
-    operationalCycleId
-      ? supabase
-          .from("groups")
-          .select("id, name, code, cycle_id, grade_level_id")
-          .eq("cycle_id", operationalCycleId)
-          .eq("is_active", true)
-          .order("name")
-      : Promise.resolve({ data: [], error: null }),
     activeTab === "account"
       ? getStudentAccount(supabase, id)
       : Promise.resolve({ data: null, error: false }),
@@ -101,16 +80,37 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
     ? await getStudentPaymentDetails(supabase, student.id, accountPaymentIds)
     : { data: [], error: false }
 
-  const actionEnrollment = enrollmentResult.data[0] ?? null
-  const enrollment = actionEnrollment ?? student.enrollment
+  const historicalEnrollmentResults = activeTab === "enrollment"
+    ? await Promise.all((catalogs?.cycles ?? []).map((cycle) => getEnrollments(supabase, { cycleId: cycle.id, studentId: id })))
+    : []
+  const historicalEnrollments = historicalEnrollmentResults.flatMap((result) => result.data)
+  const currentEnrollment = enrollmentResult.data[0] ?? null
+  const requestedCycleId = typeof query.cycle === "string" ? query.cycle : undefined
+  const selectedEnrollment = activeTab === "enrollment"
+    ? historicalEnrollments.find((item) => item.cycleId === requestedCycleId)
+      ?? currentEnrollment
+      ?? [...historicalEnrollments].sort((left, right) => right.enrolledOn.localeCompare(left.enrolledOn))[0]
+      ?? null
+    : currentEnrollment
+  const actionEnrollment = selectedEnrollment
+  const enrollment = currentEnrollment ?? student.enrollment
+  const actionCycleId = actionEnrollment?.cycleId ?? operationalCycleId
+  const [actionPlansResult, actionFinancialCoverageResult, actionDiscountCategoriesResult, actionGroupsResult] = await Promise.all([
+    actionCycleId ? getTenPaymentPlans(supabase) : Promise.resolve({ data: [], error: false }),
+    actionCycleId ? getEnrollmentFinancialCoverage(supabase) : Promise.resolve({ data: [], error: false }),
+    actionCycleId ? getTuitionDiscountCategories(supabase, actionCycleId) : Promise.resolve({ data: [], error: false }),
+    actionCycleId
+      ? supabase.from("groups").select("id, name, code, cycle_id, grade_level_id").eq("cycle_id", actionCycleId).eq("is_active", true).order("name")
+      : Promise.resolve({ data: [], error: null }),
+  ])
   const schoolActionsAvailable = Boolean(
-    actionEnrollment && !groupsResult.error
+    actionEnrollment && !actionGroupsResult.error
   )
   const financialActionsAvailable = Boolean(
     actionEnrollment &&
-      !tenPaymentPlansResult.error &&
-      !financialCoverageResult.error &&
-      !discountCategoriesResult.error
+      !actionPlansResult.error &&
+      !actionFinancialCoverageResult.error &&
+      !actionDiscountCategoriesResult.error
   )
   const studentContext = enrollment
     ? `${enrollment.educationLevel.name} · ${enrollment.gradeLevel.name}${enrollment.group ? ` · ${getEnrollmentGroupLabel(enrollment.group)}` : ""}`
@@ -253,20 +253,41 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
             </dl>
           </SummarySection>
         </div> : activeTab === "enrollment" ? <div className="order-last space-y-7 xl:order-none xl:col-start-1 xl:row-start-1">
-          <SummarySection title="Datos escolares">
-            {enrollment ? (
+          <SummarySection
+            title="Datos escolares"
+            action={schoolActionsAvailable && actionEnrollment ? (
+              <EnrollmentActions
+                section="school"
+                schoolAction="editor"
+                enrollment={actionEnrollment}
+                canGraduate={isGraduationEligible(actionEnrollment)}
+                grades={catalogs?.grades ?? []}
+                educationLevels={catalogs?.levels ?? []}
+                groups={actionGroupsResult.data ?? []}
+                classifications={catalogs?.classifications ?? []}
+                tenPaymentPlans={actionPlansResult.data}
+                financialCoverage={actionFinancialCoverageResult.data}
+                discountCategories={actionDiscountCategoriesResult.data}
+              />
+            ) : undefined}
+          >
+            {actionEnrollment ? (
               <>
+                <EnrollmentCycleSelect
+                  cycles={(catalogs?.cycles ?? []).filter((cycle) => historicalEnrollments.some((item) => item.cycleId === cycle.id))}
+                  value={actionEnrollment?.cycleId ?? ""}
+                />
                 <dl className="grid gap-4 sm:grid-cols-2">
-                  <Detail label="Ciclo" value={enrollment.cycle.name} />
-                  <Detail label="Estado" value={formatEnrollmentStatus(enrollment.status)} />
-                  <Detail label="Nivel" value={enrollment.educationLevel.name} />
-                  <Detail label="Grado" value={enrollment.gradeLevel.name} />
-                  <Detail label="Grupo" value={enrollment.group ? getEnrollmentGroupLabel(enrollment.group) : "Sin grupo asignado"} />
-                  <Detail label="Clasificación" value={enrollment.classification.name} />
-                  <Detail label="Fecha de matrícula" value={formatDate(enrollment.enrolledOn)} />
+                  <Detail label="Ciclo" value={actionEnrollment.cycle.name} />
+                  <Detail label="Matrícula" value={formatEnrollmentStatus(actionEnrollment.status)} />
+                  <Detail label="Nivel" value={actionEnrollment.educationLevel.name} />
+                  <Detail label="Grado" value={actionEnrollment.gradeLevel.name} />
+                  <Detail label="Grupo" value={actionEnrollment.group ? getEnrollmentGroupLabel(actionEnrollment.group) : "Sin grupo asignado"} />
+                  <Detail label="Clasificación" value={actionEnrollment.classification.name} />
+                  <Detail label="Fecha de matrícula" value={formatDate(actionEnrollment.enrolledOn)} />
                   <Detail
                     label="Inicio de clases"
-                    value={enrollment.classesStartOn ? formatDate(enrollment.classesStartOn) : "Sin fecha registrada"}
+                    value={actionEnrollment.classesStartOn ? formatDate(actionEnrollment.classesStartOn) : "Sin fecha registrada"}
                   />
                   {actionEnrollment && <Detail
                     label="Inicio financiero"
@@ -275,23 +296,24 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
                   {actionEnrollment?.closedOn && <Detail label="Fecha de cierre" value={formatDate(actionEnrollment.closedOn)} />}
                 </dl>
                 {schoolActionsAvailable && actionEnrollment && (
-                  <>
-                    <EnrollmentActions
-                      section="school"
-                      enrollment={actionEnrollment}
-                      groups={groupsResult.data ?? []}
-                      classifications={catalogs?.classifications ?? []}
-                      tenPaymentPlans={tenPaymentPlansResult.data}
-                      financialCoverage={financialCoverageResult.data}
-                      discountCategories={discountCategoriesResult.data}
-                    />
-                    {actionEnrollment.status === "FINALIZADA" && isGraduationEligible(actionEnrollment) && <div className="mt-5 border-t border-border pt-4"><GraduateEnrollmentSheet enrollment={actionEnrollment} /></div>}
-                  </>
+                  <EnrollmentActions
+                    section="school"
+                    schoolAction="quick"
+                    enrollment={actionEnrollment}
+                    canGraduate={isGraduationEligible(actionEnrollment)}
+                    grades={catalogs?.grades ?? []}
+                    educationLevels={catalogs?.levels ?? []}
+                    groups={actionGroupsResult.data ?? []}
+                    classifications={catalogs?.classifications ?? []}
+                    tenPaymentPlans={actionPlansResult.data}
+                    financialCoverage={actionFinancialCoverageResult.data}
+                    discountCategories={actionDiscountCategoriesResult.data}
+                  />
                 )}
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Este alumno no tiene una matrícula en el ciclo operativo actual.
+                Este alumno no tiene matrículas registradas.
               </p>
             )}
           </SummarySection>
@@ -319,11 +341,13 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
               <EnrollmentActions
                 section="financial"
                 enrollment={actionEnrollment}
-                groups={groupsResult.data ?? []}
+                grades={catalogs?.grades ?? []}
+                educationLevels={catalogs?.levels ?? []}
+                groups={actionGroupsResult.data ?? []}
                 classifications={catalogs?.classifications ?? []}
-                tenPaymentPlans={tenPaymentPlansResult.data}
-                financialCoverage={financialCoverageResult.data}
-                discountCategories={discountCategoriesResult.data}
+                tenPaymentPlans={actionPlansResult.data}
+                financialCoverage={actionFinancialCoverageResult.data}
+                discountCategories={actionDiscountCategoriesResult.data}
               />
             )}
           </SummarySection>}
@@ -390,10 +414,7 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
 }
 
 function isGraduationEligible(enrollment: EnrollmentListItem) {
-  return enrollment.gradeLevel.isTerminal && (
-    (enrollment.educationLevel.code === "PRIMARIA" && enrollment.gradeLevel.code === "6") ||
-    (enrollment.educationLevel.code === "PREESCOLAR" && enrollment.gradeLevel.code === "3")
-  )
+  return enrollment.gradeLevel.isTerminal === true
 }
 
 function validReturnTo(value: string | string[] | undefined) {

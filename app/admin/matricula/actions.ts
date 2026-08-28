@@ -954,6 +954,60 @@ export async function changeEnrollmentClassification(input: {
   return { ok: true }
 }
 
+export async function changeEnrollmentGrade(input: {
+  enrollmentId: string
+  gradeLevelId: string
+  groupId: string | null
+  effectiveOn: string
+  reason: string
+}): Promise<EnrollmentMutationResult> {
+  if (!input.gradeLevelId) return { ok: false, message: "Selecciona un grado nuevo." }
+  const validationMessage = validateMutationInput(input.effectiveOn, input.reason, "grade")
+  if (validationMessage) return { ok: false, message: validationMessage }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { error } = await supabase.rpc("change_enrollment_grade", {
+    p_enrollment_id: input.enrollmentId,
+    p_grade_level_id: input.gradeLevelId,
+    p_group_id: input.groupId,
+    p_effective_on: input.effectiveOn,
+    p_reason: input.reason.trim(),
+  })
+
+  if (error) return { ok: false, message: mapEnrollmentError(error.message, "grade") }
+  revalidatePath("/admin/matricula")
+  revalidatePath("/admin/alumnos")
+  return { ok: true }
+}
+
+export async function correctEnrollmentAcademicDates(input: {
+  enrollmentId: string
+  enrolledOn: string
+  classesStartOn: string | null
+  effectiveOn: string
+  reason: string
+}): Promise<EnrollmentMutationResult> {
+  if (!isDate(input.enrolledOn) || (input.classesStartOn !== null && input.classesStartOn !== "" && !isDate(input.classesStartOn))) {
+    return { ok: false, message: "Captura fechas académicas válidas." }
+  }
+  const validationMessage = validateMutationInput(input.effectiveOn, input.reason, "dates")
+  if (validationMessage) return { ok: false, message: validationMessage }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { error } = await supabase.rpc("correct_enrollment_academic_dates", {
+    p_enrollment_id: input.enrollmentId,
+    p_enrolled_on: input.enrolledOn,
+    p_classes_start_on: input.classesStartOn || null,
+    p_effective_on: input.effectiveOn,
+    p_reason: input.reason.trim(),
+  })
+
+  if (error) return { ok: false, message: mapEnrollmentError(error.message, "dates") }
+  revalidatePath("/admin/matricula")
+  revalidatePath("/admin/alumnos")
+  return { ok: true }
+}
+
 export async function setEnrollmentTuitionDiscount(input: {
   enrollmentId: string
   studentId: string
@@ -1101,6 +1155,52 @@ export async function finalizeActiveEnrollments(input: {
 
   revalidatePath("/admin/matricula")
   return { ok: true, finalizedCount: data }
+}
+
+export async function finalizeSelectedEnrollments(input: {
+  enrollmentIds: string[]
+  effectiveOn: string
+}): Promise<{ ok: true; finalizedCount: number } | { ok: false; message: string }> {
+  const enrollmentIds = [...new Set(input.enrollmentIds.filter(Boolean))]
+  if (!enrollmentIds.length || !isDate(input.effectiveOn)) {
+    return { ok: false, message: "Selecciona matrículas y una fecha efectiva válida." }
+  }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { data, error } = await supabase.rpc("finalize_selected_enrollments", {
+    p_enrollment_ids: enrollmentIds,
+    p_effective_on: input.effectiveOn,
+  })
+
+  if (error || typeof data !== "number") {
+    return { ok: false, message: mapEnrollmentError(error?.message, "finalization") }
+  }
+
+  revalidatePath("/admin/matricula")
+  return { ok: true, finalizedCount: data }
+}
+
+export async function graduateSelectedEnrollments(input: {
+  enrollmentIds: string[]
+  effectiveOn: string
+}): Promise<{ ok: true; graduatedCount: number } | { ok: false; message: string }> {
+  const enrollmentIds = [...new Set(input.enrollmentIds.filter(Boolean))]
+  if (!enrollmentIds.length || !isDate(input.effectiveOn)) {
+    return { ok: false, message: "Selecciona matrículas y una fecha efectiva válida." }
+  }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { data, error } = await supabase.rpc("graduate_selected_enrollments", {
+    p_enrollment_ids: enrollmentIds,
+    p_effective_on: input.effectiveOn,
+  })
+
+  if (error || typeof data !== "number") {
+    return { ok: false, message: mapEnrollmentError(error?.message, "graduation") }
+  }
+
+  revalidatePath("/admin/matricula")
+  return { ok: true, graduatedCount: data }
 }
 
 export async function graduateEnrollment(input: {
@@ -1348,7 +1448,7 @@ function mapFinancialStartRegularizationError(message: string | undefined) {
   return "No pudimos regularizar el inicio financiero. Revisa los datos e inténtalo de nuevo."
 }
 
-function validateMutationInput(effectiveOn: string, reason: string, action: "plan" | "group" | "classification") {
+function validateMutationInput(effectiveOn: string, reason: string, action: "plan" | "group" | "classification" | "grade" | "dates") {
   if (!isDate(effectiveOn)) return "Captura una fecha efectiva válida."
   if (!reason.trim()) return `Indica el motivo del cambio de ${action}.`
   return null

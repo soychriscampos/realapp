@@ -3,7 +3,7 @@
 import { Dialog } from "@base-ui/react/dialog"
 import { Menu } from "@base-ui/react/menu"
 import { Toast } from "@base-ui/react/toast"
-import { ChevronLeft, Ellipsis, LoaderCircle, X } from "lucide-react"
+import { ChevronLeft, Ellipsis, LoaderCircle, Pencil, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState, useTransition } from "react"
 
@@ -11,7 +11,11 @@ import {
   changeEnrollmentClassification,
   changeEnrollmentFinancialPlan,
   changeEnrollmentGroup,
+  changeEnrollmentGrade,
+  correctEnrollmentAcademicDates,
+  finalizeSelectedEnrollments,
   getEnrollmentFeeCoverage,
+  graduateEnrollment,
   reactivateEnrollmentFinancial,
   regularizeEnrollmentFinancialStart,
   setEnrollmentTuitionDiscount,
@@ -23,6 +27,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
   getEnrollmentGroupLabel,
+  formatEnrollmentStatus,
   type EnrollmentFinancialCoverage,
   type EnrollmentListItem,
   type FinancialPlanOption,
@@ -32,31 +37,47 @@ import { calculateTuitionDiscountPreview, formatCurrency, formatTuitionDiscountV
 
 type GroupOption = { id: string; name: string; code: string; cycle_id: string; grade_level_id: string }
 type ClassificationOption = { id: string; name: string }
-type ActionMode = "plan" | "group" | "classification" | "discount" | "withdrawal" | "reactivation" | "regularization"
+type GradeOption = { id: string; name: string; education_level_id: string }
+type EducationLevelOption = { id: string; name: string }
+type ActionMode = "editor" | "plan" | "group" | "classification" | "grade" | "dates" | "discount" | "withdrawal" | "reactivation" | "regularization" | "finalization" | "graduation"
 
 type EnrollmentActionsProps = {
   enrollment: EnrollmentListItem
   groups: GroupOption[]
   classifications: ClassificationOption[]
+  grades?: GradeOption[]
+  educationLevels?: EducationLevelOption[]
   tenPaymentPlans: FinancialPlanOption[]
   financialCoverage: EnrollmentFinancialCoverage[]
   discountCategories: TuitionDiscountCategory[]
   section?: "menu" | "school" | "financial"
+  schoolAction?: "editor" | "quick"
+  canGraduate?: boolean
 }
 
 export function EnrollmentActions({
   enrollment,
   groups,
   classifications,
+  grades = [],
+  educationLevels = [],
   tenPaymentPlans,
   financialCoverage,
   discountCategories,
   section = "menu",
+  schoolAction = "editor",
+  canGraduate = false,
 }: EnrollmentActionsProps) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<ActionMode | null>(null)
+  const [fromEditor, setFromEditor] = useState(false)
   const [step, setStep] = useState<"form" | "review">("form")
   const [targetId, setTargetId] = useState("")
+  const [gradeLevelId, setGradeLevelId] = useState(enrollment.gradeLevel.id)
+  const [gradeGroupId, setGradeGroupId] = useState(enrollment.group?.id ?? "")
+  const [enrolledOn, setEnrolledOn] = useState(enrollment.enrolledOn)
+  const [classesStartOn, setClassesStartOn] = useState(enrollment.classesStartOn ?? "")
+  const [dateFocus, setDateFocus] = useState<"enrolledOn" | "classesStartOn">("enrolledOn")
   const [effectiveOn, setEffectiveOn] = useState(dateInput(new Date()))
   const [currentPeriodAction, setCurrentPeriodAction] = useState<"KEEP_FULL" | "PROPORTIONAL" | "AGREED" | "WAIVE">("KEEP_FULL")
   const [currentPeriodAmount, setCurrentPeriodAmount] = useState("")
@@ -151,21 +172,28 @@ export function EnrollmentActions({
   }, [mode, regularizationBeforeFirstPeriod, regularizationPeriod, regularizationSuggestedAmount])
 
   const selectedTarget = useMemo(() => {
-    if (mode === "withdrawal" || mode === "reactivation" || mode === "discount") return null
+    if (mode === "editor" || mode === "withdrawal" || mode === "reactivation" || mode === "discount" || mode === "finalization" || mode === "graduation" || mode === "grade" || mode === "dates") return null
     if (mode === "plan") return compatiblePlans.find((plan) => plan.id === targetId) ?? null
     if (mode === "group") return compatibleGroups.find((group) => group.id === targetId) ?? null
     return availableClassifications.find((classification) => classification.id === targetId) ?? null
   }, [availableClassifications, compatibleGroups, compatiblePlans, mode, targetId])
 
   const canChange = !["FINALIZADA", "NO_CONTINUA", "EGRESADA"].includes(enrollment.status)
+  const canEditSchool = !["NO_CONTINUA", "EGRESADA"].includes(enrollment.status) && (enrollment.status !== "FINALIZADA" || canGraduate)
   const planAvailable = enrollment.currentPlan?.installmentCount === 12 && compatiblePlans.length > 0
 
-  async function openAction(nextMode: ActionMode) {
+  async function openAction(nextMode: Exclude<ActionMode, "editor">, keepEditor = false, nextDateFocus?: "enrolledOn" | "classesStartOn") {
     setMode(nextMode)
+    setFromEditor(keepEditor)
     setOpen(true)
     setStep("form")
     setTargetId("")
-    setEffectiveOn(dateInput(new Date()))
+    setGradeLevelId(enrollment.gradeLevel.id)
+    setGradeGroupId(enrollment.group?.id ?? "")
+    setEnrolledOn(enrollment.enrolledOn)
+    setClassesStartOn(enrollment.classesStartOn ?? "")
+    if (nextMode === "dates") setDateFocus(nextDateFocus ?? "enrolledOn")
+    setEffectiveOn(nextMode === "finalization" || nextMode === "graduation" ? enrollment.cycle.endsOn : dateInput(new Date()))
     setCurrentPeriodAction("KEEP_FULL")
     setCurrentPeriodAmount("")
     setFutureMode("STOP_FUTURE")
@@ -197,6 +225,14 @@ export function EnrollmentActions({
     }
   }
 
+  function openEditor() {
+    setMode("editor")
+    setFromEditor(false)
+    setOpen(true)
+    setStep("form")
+    setError(null)
+  }
+
   function close() {
     if (isPending) return
     setOpen(false)
@@ -207,6 +243,75 @@ export function EnrollmentActions({
 
   function review() {
     if (!mode) return
+    if (mode === "graduation") {
+      if (!["ACTIVA", "FINALIZADA"].includes(enrollment.status) || !canGraduate) {
+        setError("Esta matrícula no está disponible para egreso.")
+        return
+      }
+      if (!isDate(effectiveOn) || effectiveOn < enrollment.cycle.startsOn || effectiveOn > enrollment.cycle.endsOn) {
+        setError(`La fecha de egreso debe estar entre ${formatDate(enrollment.cycle.startsOn)} y ${formatDate(enrollment.cycle.endsOn)}.`)
+        return
+      }
+      setError(null)
+      setStep("review")
+      return
+    }
+    if (mode === "editor") return
+    if (mode === "finalization") {
+      if (enrollment.status !== "ACTIVA") {
+        setError("Solo se puede finalizar una matrícula activa.")
+        return
+      }
+      if (!isDate(effectiveOn) || effectiveOn < enrollment.cycle.startsOn || effectiveOn > enrollment.cycle.endsOn) {
+        setError(`La fecha de finalización debe estar entre ${formatDate(enrollment.cycle.startsOn)} y ${formatDate(enrollment.cycle.endsOn)}.`)
+        return
+      }
+      setError(null)
+      setStep("review")
+      return
+    }
+    if (mode === "grade") {
+      if (!gradeLevelId) {
+        setError("Selecciona un grado.")
+        return
+      }
+      if (!isDate(effectiveOn)) {
+        setError("Captura una fecha efectiva válida.")
+        return
+      }
+      if (gradeLevelId === enrollment.gradeLevel.id && gradeGroupId === (enrollment.group?.id ?? "")) {
+        setError("No hay cambios que guardar.")
+        return
+      }
+      if (!reason.trim()) {
+        setError("Indica el motivo de la corrección de grado.")
+        return
+      }
+      setError(null)
+      setStep("review")
+      return
+    }
+    if (mode === "dates") {
+      if (!isDate(enrolledOn) || (classesStartOn !== "" && !isDate(classesStartOn))) {
+        setError("Captura fechas académicas válidas.")
+        return
+      }
+      if (!isDate(effectiveOn)) {
+        setError("Captura una fecha efectiva válida.")
+        return
+      }
+      if (enrolledOn === enrollment.enrolledOn && (classesStartOn || null) === enrollment.classesStartOn) {
+        setError("No hay cambios que guardar.")
+        return
+      }
+      if (!reason.trim()) {
+        setError("Indica el motivo de la corrección de fechas.")
+        return
+      }
+      setError(null)
+      setStep("review")
+      return
+    }
     if (mode === "regularization") {
       const firstAllowedDate = enrollment.enrolledOn > enrollment.cycle.startsOn ? enrollment.enrolledOn : enrollment.cycle.startsOn
       if (enrollment.status !== "ACTIVA") {
@@ -337,6 +442,84 @@ export function EnrollmentActions({
 
   function submit() {
     if (!mode) return
+
+    if (mode === "graduation") {
+      startTransition(async () => {
+        const result = await graduateEnrollment({ enrollmentId: enrollment.id, effectiveOn })
+        if (!result.ok) {
+          setError(result.message)
+          setStep("form")
+          return
+        }
+        toastManager.add({ title: "Egreso registrado", description: "La matrícula se marcó como egresada." })
+        close()
+        router.refresh()
+      })
+      return
+    }
+    if (mode === "editor") return
+
+    if (mode === "finalization") {
+      startTransition(async () => {
+        const result = await finalizeSelectedEnrollments({
+          enrollmentIds: [enrollment.id],
+          effectiveOn,
+        })
+
+        if (!result.ok) {
+          setError(result.message)
+          setStep("form")
+          return
+        }
+
+        toastManager.add({ title: "Matrícula finalizada", description: "La matrícula ahora está finalizada." })
+        close()
+        router.refresh()
+      })
+      return
+    }
+
+    if (mode === "grade") {
+      startTransition(async () => {
+        const result = await changeEnrollmentGrade({
+          enrollmentId: enrollment.id,
+          gradeLevelId,
+          groupId: gradeGroupId || null,
+          effectiveOn,
+          reason,
+        })
+        if (!result.ok) {
+          setError(result.message)
+          setStep("form")
+          return
+        }
+        toastManager.add({ title: "Grado corregido", description: "Los datos escolares fueron actualizados." })
+        close()
+        router.refresh()
+      })
+      return
+    }
+
+    if (mode === "dates") {
+      startTransition(async () => {
+        const result = await correctEnrollmentAcademicDates({
+          enrollmentId: enrollment.id,
+          enrolledOn,
+          classesStartOn: classesStartOn || null,
+          effectiveOn,
+          reason,
+        })
+        if (!result.ok) {
+          setError(result.message)
+          setStep("form")
+          return
+        }
+        toastManager.add({ title: "Fechas corregidas", description: "Las fechas académicas fueron actualizadas." })
+        close()
+        router.refresh()
+      })
+      return
+    }
 
     if (mode === "regularization") {
       startTransition(async () => {
@@ -510,7 +693,7 @@ export function EnrollmentActions({
               </Menu.Item></>}
               {enrollment.status === "ACTIVA" && <Menu.Item onClick={() => openAction("discount")} disabled={!enrollment.currentTuition || !discountCategories.length} className="flex h-9 items-center rounded-lg px-2 text-sm outline-none hover:bg-muted data-disabled:pointer-events-none data-disabled:opacity-50">Asignar descuento</Menu.Item>}
               {enrollment.status === "ACTIVA" && <Menu.Item onClick={() => openAction("regularization")} className="flex h-9 items-center rounded-lg px-2 text-sm outline-none hover:bg-muted">Regularizar inicio financiero</Menu.Item>}
-              {enrollment.status === "ACTIVA" && <><Menu.Separator className="my-1 h-px bg-border" /><Menu.Item onClick={() => openAction("withdrawal")} className="flex h-9 items-center rounded-lg px-2 text-sm text-destructive outline-none hover:bg-destructive/10">Dar de baja</Menu.Item></>}
+              {enrollment.status === "ACTIVA" && <><Menu.Separator className="my-1 h-px bg-border" /><Menu.Item onClick={() => openAction("finalization")} className="flex h-9 items-center rounded-lg px-2 text-sm outline-none hover:bg-muted">Finalizar matrícula</Menu.Item><Menu.Item onClick={() => openAction("withdrawal")} className="flex h-9 items-center rounded-lg px-2 text-sm text-destructive outline-none hover:bg-destructive/10">Dar de baja</Menu.Item></>}
               {enrollment.status === "BAJA" && <Menu.Item onClick={() => void openAction("reactivation")} className="flex h-9 items-center rounded-lg px-2 text-sm outline-none hover:bg-muted">Reactivar</Menu.Item>}
             </Menu.Popup>
           </Menu.Positioner>
@@ -519,10 +702,11 @@ export function EnrollmentActions({
         section={section}
         enrollment={enrollment}
         canChange={canChange}
+        canEditSchool={canEditSchool}
         planAvailable={planAvailable}
-        hasCompatibleGroups={compatibleGroups.length > 0}
-        hasAvailableClassifications={availableClassifications.length > 0}
         canAssignDiscount={Boolean(enrollment.currentTuition && discountCategories.length)}
+        schoolAction={schoolAction}
+        onOpenEditor={openEditor}
         onOpenAction={openAction}
       />}
 
@@ -540,7 +724,11 @@ export function EnrollmentActions({
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-            {step === "form" && mode && mode !== "reactivation" && mode !== "discount" && mode !== "regularization" && <ActionForm mode={mode} enrollment={enrollment} targetId={targetId} setTargetId={setTargetId} effectiveOn={effectiveOn} setEffectiveOn={setEffectiveOn} reason={reason} setReason={setReason} groups={compatibleGroups} classifications={availableClassifications} plans={compatiblePlans} planAvailable={planAvailable} currentPeriodAction={currentPeriodAction} setCurrentPeriodAction={setCurrentPeriodAction} currentPeriodAmount={currentPeriodAmount} setCurrentPeriodAmount={setCurrentPeriodAmount} futureMode={futureMode} setFutureMode={setFutureMode} />}
+            {step === "form" && mode === "editor" && <EnrollmentEditorForm enrollment={enrollment} groups={compatibleGroups} classifications={availableClassifications} grades={grades} educationLevels={educationLevels} canGraduate={canGraduate} onSelect={(nextMode, nextDateFocus) => void openAction(nextMode, true, nextDateFocus)} onSelectState={(nextMode) => void openAction(nextMode, true)} />}
+            {step === "form" && mode === "grade" && <GradeCorrectionForm enrollment={enrollment} grades={grades} educationLevels={educationLevels} groups={groups} gradeLevelId={gradeLevelId} setGradeLevelId={(value) => { setGradeLevelId(value); if (!groups.some((group) => group.id === gradeGroupId && group.grade_level_id === value)) setGradeGroupId("") }} groupId={gradeGroupId} setGroupId={setGradeGroupId} effectiveOn={effectiveOn} setEffectiveOn={setEffectiveOn} reason={reason} setReason={setReason} />}
+            {step === "form" && mode === "dates" && <AcademicDatesCorrectionForm enrollment={enrollment} enrolledOn={enrolledOn} setEnrolledOn={setEnrolledOn} classesStartOn={classesStartOn} setClassesStartOn={setClassesStartOn} effectiveOn={effectiveOn} setEffectiveOn={setEffectiveOn} reason={reason} setReason={setReason} focus={dateFocus} />}
+            {step === "form" && mode === "finalization" && <FinalizationForm enrollment={enrollment} effectiveOn={effectiveOn} setEffectiveOn={setEffectiveOn} />}
+            {step === "form" && mode && mode !== "editor" && mode !== "grade" && mode !== "dates" && mode !== "finalization" && mode !== "graduation" && mode !== "reactivation" && mode !== "discount" && mode !== "regularization" && <ActionForm mode={mode} enrollment={enrollment} targetId={targetId} setTargetId={setTargetId} effectiveOn={effectiveOn} setEffectiveOn={setEffectiveOn} reason={reason} setReason={setReason} groups={compatibleGroups} classifications={availableClassifications} plans={compatiblePlans} planAvailable={planAvailable} currentPeriodAction={currentPeriodAction} setCurrentPeriodAction={setCurrentPeriodAction} currentPeriodAmount={currentPeriodAmount} setCurrentPeriodAmount={setCurrentPeriodAmount} futureMode={futureMode} setFutureMode={setFutureMode} />}
             {step === "form" && mode === "reactivation" && <ReactivationForm enrollment={enrollment} groups={reactivationGroups} groupId={targetId} setGroupId={setTargetId} reactivatedOn={effectiveOn} setReactivatedOn={setEffectiveOn} economicStartOn={economicStartOn} setEconomicStartOn={setEconomicStartOn} isPartial={reactivationIsPartial} tuitionAgreement={reactivationTuitionAgreement} tuitionMode={initialTuitionMode} setTuitionMode={setInitialTuitionMode} tuitionAmount={initialTuitionAmount} setTuitionAmount={setInitialTuitionAmount} enrollmentFeeCoverage={enrollmentFeeCoverage} enrollmentFeeMode={enrollmentFeeMode} setEnrollmentFeeMode={setEnrollmentFeeMode} enrollmentFeeAmount={enrollmentFeeAmount} setEnrollmentFeeAmount={setEnrollmentFeeAmount} reason={reason} setReason={setReason} />}
             {step === "form" && mode === "discount" && <DiscountForm enrollment={enrollment} categories={discountCategories} categoryId={discountCategoryId} setCategoryId={setDiscountCategoryId} effectiveOn={effectiveOn} setEffectiveOn={setEffectiveOn} effectMode={discountEffectMode} setEffectMode={setDiscountEffectMode} currentPeriodAmount={discountCurrentPeriodAmount} setCurrentPeriodAmount={setDiscountCurrentPeriodAmount} selectedCategory={selectedDiscountCategory} selectedVersion={selectedDiscountVersion} preview={discountPreview} reason={reason} setReason={setReason} />}
             {step === "form" && mode === "regularization" && <RegularizationForm enrollment={enrollment} economicStartOn={economicStartOn} setEconomicStartOn={setEconomicStartOn} amount={regularizationAmount} setAmount={setRegularizationAmount} dueDate={regularizationDueDate} setDueDate={setRegularizationDueDate} beforeFirstPeriod={regularizationBeforeFirstPeriod} isPartial={regularizationIsPartial} needsAmount={regularizationNeedsAmount} coveragePeriod={regularizationPeriod} reason={reason} setReason={setReason} />}
@@ -548,16 +736,21 @@ export function EnrollmentActions({
             {step === "review" && mode === "reactivation" && <ReactivationReview group={reactivationGroups.find((group) => group.id === targetId) ?? null} reactivatedOn={effectiveOn} economicStartOn={economicStartOn} isPartial={reactivationIsPartial} tuitionMode={initialTuitionMode} tuitionAmount={initialTuitionMode === "FULL" ? reactivationTuitionAgreement?.agreedAmount.toString() ?? "" : initialTuitionAmount} enrollmentFeeCoverage={enrollmentFeeCoverage} enrollmentFeeMode={enrollmentFeeMode} enrollmentFeeAmount={enrollmentFeeAmount} reason={reason} />}
             {step === "review" && mode === "discount" && selectedDiscountCategory && <DiscountReview enrollment={enrollment} category={selectedDiscountCategory} version={selectedDiscountVersion} preview={discountPreview} effectiveOn={effectiveOn} effectMode={discountEffectMode} currentPeriodAmount={discountCurrentPeriodAmount} reason={reason} />}
             {step === "review" && mode === "regularization" && <RegularizationReview enrollment={enrollment} economicStartOn={economicStartOn} amount={regularizationNeedsAmount ? regularizationAmount : ""} dueDate={regularizationBeforeFirstPeriod ? regularizationDueDate : regularizationPeriod?.dueDate ?? ""} beforeFirstPeriod={regularizationBeforeFirstPeriod} reason={reason} />}
+            {step === "review" && mode === "finalization" && <FinalizationReview enrollment={enrollment} effectiveOn={effectiveOn} />}
+            {step === "review" && mode === "grade" && <GradeCorrectionReview enrollment={enrollment} grades={grades} groups={groups} gradeLevelId={gradeLevelId} groupId={gradeGroupId} effectiveOn={effectiveOn} reason={reason} />}
+            {step === "review" && mode === "dates" && <AcademicDatesCorrectionReview enrollment={enrollment} enrolledOn={enrolledOn} classesStartOn={classesStartOn} effectiveOn={effectiveOn} reason={reason} />}
+            {step === "form" && mode === "graduation" && <GraduationForm enrollment={enrollment} effectiveOn={effectiveOn} setEffectiveOn={setEffectiveOn} />}
+            {step === "review" && mode === "graduation" && <GraduationReview enrollment={enrollment} effectiveOn={effectiveOn} />}
             {step === "review" && mode && mode !== "withdrawal" && mode !== "reactivation" && mode !== "discount" && mode !== "regularization" && selectedTarget && <ActionReview mode={mode} enrollment={enrollment} target={selectedTarget} effectiveOn={effectiveOn} reason={reason} />}
           </div>
 
           {error && <p className="border-t border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:px-6" role="alert">{error}</p>}
           <footer className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] sm:px-6">
-            <Button variant="ghost" className="h-10" disabled={isPending} onClick={() => step === "review" ? setStep("form") : close()}>
-              <ChevronLeft /> {mode === "regularization" && step === "form" ? "Cancelar" : "Atrás"}
+            <Button variant="ghost" className="h-10" disabled={isPending} onClick={() => step === "review" ? setStep("form") : mode === "editor" ? close() : fromEditor ? setMode("editor") : close()}>
+              <ChevronLeft /> {mode === "regularization" && step === "form" || mode === "editor" ? "Cancelar" : "Atrás"}
             </Button>
-            {step === "review" ? (
-              <Button className="h-10" disabled={isPending} onClick={submit}>{isPending && <LoaderCircle className="animate-spin" />}{isPending ? "Guardando..." : mode === "withdrawal" ? "Confirmar baja" : mode === "reactivation" ? "Confirmar reactivación" : mode === "discount" ? "Confirmar descuento" : mode === "regularization" ? "Confirmar regularización" : "Confirmar cambio"}</Button>
+            {mode === "editor" ? null : step === "review" ? (
+              <Button className="h-10" disabled={isPending} onClick={submit}>{isPending && <LoaderCircle className="animate-spin" />}{isPending ? "Guardando..." : mode === "finalization" ? "Confirmar finalización" : mode === "graduation" ? "Confirmar egreso" : mode === "withdrawal" ? "Confirmar baja" : mode === "reactivation" ? "Confirmar reactivación" : mode === "discount" ? "Confirmar descuento" : mode === "regularization" ? "Confirmar regularización" : mode === "grade" || mode === "dates" ? "Confirmar corrección" : "Confirmar cambio"}</Button>
             ) : (
               <Button className="h-10" disabled={isPending} onClick={mode === "regularization" ? submit : review}>{mode === "regularization" ? "Confirmar regularización" : "Revisar"}</Button>
             )}
@@ -572,49 +765,40 @@ function EnrollmentActionPanel({
   section,
   enrollment,
   canChange,
+  canEditSchool,
   planAvailable,
-  hasCompatibleGroups,
-  hasAvailableClassifications,
   canAssignDiscount,
+  schoolAction,
+  onOpenEditor,
   onOpenAction,
 }: {
   section: "school" | "financial"
   enrollment: EnrollmentListItem
   canChange: boolean
+  canEditSchool: boolean
   planAvailable: boolean
-  hasCompatibleGroups: boolean
-  hasAvailableClassifications: boolean
   canAssignDiscount: boolean
-  onOpenAction: (mode: ActionMode) => Promise<void>
+  schoolAction: "editor" | "quick"
+  onOpenEditor: () => void
+  onOpenAction: (mode: Exclude<ActionMode, "editor">) => Promise<void>
 }) {
-  if (!canChange) return null
-
   if (section === "school") {
+    if (schoolAction === "editor") {
+      if (!canEditSchool) return null
+      return <Dialog.Trigger render={<Button variant="ghost" size="sm" onClick={onOpenEditor}><Pencil /> Editar</Button>} />
+    }
+
+    if (!canEditSchool || enrollment.status !== "ACTIVA") return null
     return (
       <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
-        {enrollment.status !== "BAJA" && <>
-          <Button variant="outline" size="sm" disabled={!hasCompatibleGroups} onClick={() => void onOpenAction("group")}>
-            Cambiar grupo
-          </Button>
-          <Button variant="outline" size="sm" disabled={!hasAvailableClassifications} onClick={() => void onOpenAction("classification")}>
-            Cambiar clasificación
-          </Button>
-        </>}
-        {enrollment.status === "ACTIVA" && (
-          <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => void onOpenAction("withdrawal")}>
-            Dar de baja
-          </Button>
-        )}
-        {enrollment.status === "BAJA" && (
-          <Button variant="outline" size="sm" onClick={() => void onOpenAction("reactivation")}>
-            Reactivar
-          </Button>
-        )}
+        <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => void onOpenAction("withdrawal")}>
+          Dar de baja
+        </Button>
       </div>
     )
   }
 
-  if (enrollment.status !== "ACTIVA") return null
+  if (!canChange || enrollment.status !== "ACTIVA") return null
 
   return (
     <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
@@ -629,6 +813,171 @@ function EnrollmentActionPanel({
       </Button>
     </div>
   )
+}
+
+function EnrollmentEditorForm({ enrollment, groups, classifications, grades, educationLevels, canGraduate, onSelect, onSelectState }: {
+  enrollment: EnrollmentListItem
+  groups: GroupOption[]
+  classifications: ClassificationOption[]
+  grades: GradeOption[]
+  educationLevels: EducationLevelOption[]
+  canGraduate: boolean
+  onSelect: (mode: Exclude<ActionMode, "editor">, dateFocus?: "enrolledOn" | "classesStartOn") => void
+  onSelectState: (mode: Exclude<ActionMode, "editor">) => void
+}) {
+  const canChangeExistingValues = !["BAJA", "FINALIZADA", "NO_CONTINUA", "EGRESADA"].includes(enrollment.status)
+  const derivedEducationLevel = educationLevels.find((level) => level.id === enrollment.educationLevel.id)?.name ?? enrollment.educationLevel.name
+  const stateOptions = enrollment.status === "ACTIVA"
+    ? [
+        ...(enrollment.gradeLevel.isTerminal ? [{ value: "EGRESADA", label: "Egresada", mode: "graduation" as const }] : []),
+        { value: "FINALIZADA", label: "Finalizada", mode: "finalization" as const },
+        { value: "BAJA", label: "Baja", mode: "withdrawal" as const },
+      ]
+    : enrollment.status === "FINALIZADA" && canGraduate
+      ? [{ value: "EGRESADA", label: "Egresada", mode: "graduation" as const }]
+      : enrollment.status === "BAJA"
+        ? [{ value: "ACTIVA", label: "Activa", mode: "reactivation" as const }]
+        : []
+
+  return (
+    <section className="space-y-4">
+      <div><h2 className="text-lg font-semibold">Editar matrícula</h2><p className="mt-1 text-sm text-muted-foreground">Selecciona la opción que deseas editar.</p></div>
+      <div className="divide-y divide-border border-y border-border">
+        <EditorRow label="Matrícula" value={formatEnrollmentStatus(enrollment.status)}>
+          <select aria-label="Nuevo estado" className="min-w-0 flex-1 bg-transparent text-right text-sm outline-none" value="" onChange={(event) => { const option = stateOptions.find((item) => item.value === event.target.value); if (option) onSelectState(option.mode) }}>
+            <option value="">{formatEnrollmentStatus(enrollment.status)}</option>
+            {stateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </EditorRow>
+        <EditorRow label="Nivel (derivado)" value={derivedEducationLevel} />
+        <EditorRow label="Grado" value={enrollment.gradeLevel.name} editable={Boolean(grades.length)} onClick={() => onSelect("grade")} />
+        <EditorRow label="Grupo" value={enrollment.group ? getEnrollmentGroupLabel(enrollment.group) : "Sin grupo"} editable={canChangeExistingValues && Boolean(groups.length)} onClick={() => onSelect("group")} />
+        <EditorRow label="Clasificación" value={enrollment.classification.name} editable={canChangeExistingValues && Boolean(classifications.length)} onClick={() => onSelect("classification")} />
+        <EditorRow label="Fecha de matrícula" value={formatDate(enrollment.enrolledOn)} editable onClick={() => onSelect("dates", "enrolledOn")} />
+        <EditorRow label="Inicio de clases" value={enrollment.classesStartOn ? formatDate(enrollment.classesStartOn) : "Sin fecha registrada"} editable onClick={() => onSelect("dates", "classesStartOn")} />
+      </div>
+      <div className="grid gap-2 pt-4">
+        <p className="text-sm font-medium">Acceso rápido</p>
+        {enrollment.status === "ACTIVA" && <Button variant="outline" className="w-full justify-center text-destructive hover:text-destructive" onClick={() => onSelect("withdrawal")}>Dar de baja</Button>}
+        {!["ACTIVA", "BAJA", "FINALIZADA"].includes(enrollment.status) && <p className="text-sm text-muted-foreground">No hay transiciones disponibles para este estado.</p>}
+      </div>
+    </section>
+  )
+}
+
+function EditorRow({ label, value, editable = false, onClick, children }: { label: string; value: string; editable?: boolean; onClick?: () => void; children?: React.ReactNode }) {
+  const className = "flex min-h-14 w-full items-center gap-4 py-3 text-left text-sm"
+  const content = <><span className="shrink-0 text-muted-foreground">{label}</span>{children ?? <span className="ml-auto min-w-0 truncate text-right font-medium">{value}</span>}{editable && <span aria-hidden="true" className="text-muted-foreground">›</span>}</>
+  return editable ? <button type="button" className={`${className} hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50`} onClick={onClick}>{content}</button> : <div className={className}>{content}</div>
+}
+
+function GradeCorrectionForm({ enrollment, grades, educationLevels, groups, gradeLevelId, setGradeLevelId, groupId, setGroupId, effectiveOn, setEffectiveOn, reason, setReason }: {
+  enrollment: EnrollmentListItem
+  grades: GradeOption[]
+  educationLevels: EducationLevelOption[]
+  groups: GroupOption[]
+  gradeLevelId: string
+  setGradeLevelId: (value: string) => void
+  groupId: string
+  setGroupId: (value: string) => void
+  effectiveOn: string
+  setEffectiveOn: (value: string) => void
+  reason: string
+  setReason: (value: string) => void
+}) {
+  const selectedGrade = grades.find((grade) => grade.id === gradeLevelId) ?? null
+  const compatibleGroups = groups.filter((group) => group.grade_level_id === gradeLevelId)
+  const selectedLevel = educationLevels.find((level) => level.id === selectedGrade?.education_level_id)?.name ?? "Sin nivel"
+
+  return (
+    <section className="space-y-5">
+      <div><h2 className="text-lg font-semibold">Corregir grado</h2><p className="mt-1 text-sm text-muted-foreground">El nivel se deriva automáticamente del grado. Si el grado cambia, selecciona un grupo compatible o deja la matrícula sin grupo.</p></div>
+      <Field label="Grado"><select className={selectClass} value={gradeLevelId} onChange={(event) => setGradeLevelId(event.target.value)}><option value="">Selecciona un grado</option>{grades.map((grade) => <option key={grade.id} value={grade.id}>{grade.name}</option>)}</select></Field>
+      <Field label="Nivel derivado"><Input value={selectedLevel} readOnly /></Field>
+      <Field label="Grupo"><select className={selectClass} value={groupId} onChange={(event) => setGroupId(event.target.value)}><option value="">Sin grupo</option>{compatibleGroups.map((group) => <option key={group.id} value={group.id}>{getEnrollmentGroupLabel(group)}</option>)}</select></Field>
+      <Field label="Fecha efectiva"><Input type="date" min={enrollment.cycle.startsOn} max={enrollment.cycle.endsOn} value={effectiveOn} onChange={(event) => setEffectiveOn(event.target.value)} /></Field>
+      <Field label="Motivo"><Textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Describe la corrección administrativa" /></Field>
+    </section>
+  )
+}
+
+function GradeCorrectionReview({ enrollment, grades, groups, gradeLevelId, groupId, effectiveOn, reason }: {
+  enrollment: EnrollmentListItem
+  grades: GradeOption[]
+  groups: GroupOption[]
+  gradeLevelId: string
+  groupId: string
+  effectiveOn: string
+  reason: string
+}) {
+  const grade = grades.find((option) => option.id === gradeLevelId)
+  const group = groups.find((option) => option.id === groupId)
+  return <section className="space-y-5"><div><h2 className="text-lg font-semibold">Revisar corrección de grado</h2><p className="mt-1 text-sm text-muted-foreground">Confirma el cambio antes de aplicarlo.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Grado actual" value={enrollment.gradeLevel.name} /><Summary label="Grado nuevo" value={grade?.name ?? "Sin seleccionar"} /><Summary label="Grupo nuevo" value={group ? getEnrollmentGroupLabel(group) : "Sin grupo"} /><Summary label="Fecha efectiva" value={formatDate(effectiveOn)} /><Summary label="Motivo" value={reason} /></dl></section>
+}
+
+function AcademicDatesCorrectionForm({ enrollment, enrolledOn, setEnrolledOn, classesStartOn, setClassesStartOn, effectiveOn, setEffectiveOn, reason, setReason, focus }: {
+  enrollment: EnrollmentListItem
+  enrolledOn: string
+  setEnrolledOn: (value: string) => void
+  classesStartOn: string
+  setClassesStartOn: (value: string) => void
+  effectiveOn: string
+  setEffectiveOn: (value: string) => void
+  reason: string
+  setReason: (value: string) => void
+  focus: "enrolledOn" | "classesStartOn"
+}) {
+  return (
+    <section className="space-y-5">
+      <div><h2 className="text-lg font-semibold">Corregir fechas académicas</h2><p className="mt-1 text-sm text-muted-foreground">Las fechas deben permanecer dentro del ciclo escolar. La fecha de cierre no se modifica.</p></div>
+      <Field label="Fecha de matrícula"><Input autoFocus={focus === "enrolledOn"} type="date" min={enrollment.cycle.startsOn} max={enrollment.cycle.endsOn} value={enrolledOn} onChange={(event) => setEnrolledOn(event.target.value)} /></Field>
+      <Field label="Inicio de clases"><Input autoFocus={focus === "classesStartOn"} type="date" min={enrollment.cycle.startsOn} max={enrollment.cycle.endsOn} value={classesStartOn} onChange={(event) => setClassesStartOn(event.target.value)} /></Field>
+      <Field label="Fecha efectiva"><Input type="date" min={enrollment.cycle.startsOn} max={enrollment.cycle.endsOn} value={effectiveOn} onChange={(event) => setEffectiveOn(event.target.value)} /></Field>
+      <Field label="Motivo"><Textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Describe la corrección administrativa" /></Field>
+    </section>
+  )
+}
+
+function AcademicDatesCorrectionReview({ enrollment, enrolledOn, classesStartOn, effectiveOn, reason }: {
+  enrollment: EnrollmentListItem
+  enrolledOn: string
+  classesStartOn: string
+  effectiveOn: string
+  reason: string
+}) {
+  return <section className="space-y-5"><div><h2 className="text-lg font-semibold">Revisar corrección de fechas</h2><p className="mt-1 text-sm text-muted-foreground">Confirma los valores antes de aplicarlos.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Fecha de matrícula" value={`${formatDate(enrollment.enrolledOn)} → ${formatDate(enrolledOn)}`} /><Summary label="Inicio de clases" value={`${enrollment.classesStartOn ? formatDate(enrollment.classesStartOn) : "Sin fecha"} → ${classesStartOn ? formatDate(classesStartOn) : "Sin fecha"}`} /><Summary label="Fecha efectiva" value={formatDate(effectiveOn)} /><Summary label="Motivo" value={reason} /></dl></section>
+}
+
+function FinalizationForm({ enrollment, effectiveOn, setEffectiveOn }: {
+  enrollment: EnrollmentListItem
+  effectiveOn: string
+  setEffectiveOn: (value: string) => void
+}) {
+  return (
+    <section className="space-y-5">
+      <div><h2 className="text-lg font-semibold">Finalizar matrícula</h2><p className="mt-1 text-sm text-muted-foreground">La matrícula conservará su ciclo e historial y cambiará de ACTIVA a FINALIZADA.</p></div>
+      <dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={enrollment.student.fullName} /><Summary label="Ciclo" value={enrollment.cycle.name} /><Summary label="Estado actual" value="Activa" /><Summary label="Nuevo estado" value="Finalizada" /></dl>
+      <Field label="Fecha efectiva"><Input type="date" min={enrollment.cycle.startsOn} max={enrollment.cycle.endsOn} value={effectiveOn} onChange={(event) => setEffectiveOn(event.target.value)} /><span className="text-xs font-normal text-muted-foreground">Debe estar dentro del ciclo escolar.</span></Field>
+      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">No se crearán matrículas nuevas ni se modificarán pagos, cargos o calificaciones.</p>
+    </section>
+  )
+}
+
+function FinalizationReview({ enrollment, effectiveOn }: { enrollment: EnrollmentListItem; effectiveOn: string }) {
+  return <section className="space-y-5"><div><h2 className="text-lg font-semibold">Revisar finalización</h2><p className="mt-1 text-sm text-muted-foreground">Confirma el cambio antes de aplicarlo.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={enrollment.student.fullName} /><Summary label="Ciclo" value={enrollment.cycle.name} /><Summary label="Estado" value="Activa → Finalizada" /><Summary label="Fecha efectiva" value={formatDate(effectiveOn)} /></dl></section>
+}
+
+function GraduationForm({ enrollment, effectiveOn, setEffectiveOn }: {
+  enrollment: EnrollmentListItem
+  effectiveOn: string
+  setEffectiveOn: (value: string) => void
+}) {
+  const transitionLabel = enrollment.status === "ACTIVA" ? "La matrícula cambiará a Egresada." : "La matrícula cambiará de Finalizada a Egresada."
+  return <section className="space-y-5"><div><h2 className="text-lg font-semibold">Marcar como egresado</h2><p className="mt-1 text-sm text-muted-foreground">{transitionLabel}</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={enrollment.student.fullName} /><Summary label="Ciclo" value={enrollment.cycle.name} /><Summary label="Nivel / grado" value={`${enrollment.educationLevel.name} · ${enrollment.gradeLevel.name}`} /></dl><Field label="Fecha efectiva de egreso"><Input type="date" min={enrollment.cycle.startsOn} max={enrollment.cycle.endsOn} value={effectiveOn} onChange={(event) => setEffectiveOn(event.target.value)} /><span className="text-xs font-normal text-muted-foreground">Captura la fecha efectiva dentro del ciclo escolar.</span></Field></section>
+}
+
+function GraduationReview({ enrollment, effectiveOn }: { enrollment: EnrollmentListItem; effectiveOn: string }) {
+  return <section className="space-y-5"><div><h2 className="text-lg font-semibold">Revisar egreso</h2><p className="mt-1 text-sm text-muted-foreground">Confirma el cambio antes de aplicarlo.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={enrollment.student.fullName} /><Summary label="Matrícula" value={`${formatEnrollmentStatus(enrollment.status)} → Egresada`} /><Summary label="Fecha efectiva" value={formatDate(effectiveOn)} /></dl></section>
 }
 
 function ActionForm({ mode, enrollment, targetId, setTargetId, effectiveOn, setEffectiveOn, reason, setReason, groups, classifications, plans, planAvailable, currentPeriodAction, setCurrentPeriodAction, currentPeriodAmount, setCurrentPeriodAmount, futureMode, setFutureMode }: {
@@ -817,7 +1166,7 @@ function Summary({ label, value }: { label: string; value: string }) {
 }
 
 function actionLabel(mode: ActionMode) {
-  return mode === "plan" ? "Cambiar plan" : mode === "group" ? "Cambiar grupo" : mode === "classification" ? "Cambiar clasificación" : mode === "discount" ? "Asignar descuento" : mode === "withdrawal" ? "Dar de baja" : mode === "reactivation" ? "Reactivar matrícula" : "Regularizar inicio financiero"
+  return mode === "editor" ? "Editar matrícula" : mode === "plan" ? "Cambiar plan" : mode === "group" ? "Cambiar grupo" : mode === "classification" ? "Cambiar clasificación" : mode === "grade" ? "Corregir grado" : mode === "dates" ? "Corregir fechas académicas" : mode === "discount" ? "Asignar descuento" : mode === "withdrawal" ? "Dar de baja" : mode === "reactivation" ? "Reactivar matrícula" : mode === "finalization" ? "Finalizar matrícula" : mode === "graduation" ? "Marcar como egresado" : "Regularizar inicio financiero"
 }
 
 function dateInput(date: Date) { return date.toISOString().slice(0, 10) }
