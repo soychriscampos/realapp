@@ -1,0 +1,14 @@
+import { requireRole } from '@/lib/auth/require-role'
+import { getAdminUsers, type AdminUser, type AdminUserStatus } from '@/lib/admin/users'
+import { StaffInvitationSheet } from '@/components/admin/staff-invitation-sheet'
+import { UserActions } from '@/components/admin/user-actions'
+
+export default async function UsersPage() {
+  const { supabase } = await requireRole(['MASTER'])
+  const users = await getAdminUsers(supabase)
+  return <div className="space-y-7"><header className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-2xl font-semibold tracking-tight">Usuarios</h1><p className="mt-1 text-sm text-muted-foreground">Administra accesos administrativos de REAL.</p></div><StaffInvitationSheet /></header><section className="space-y-3"><div className="overflow-hidden rounded-xl border border-border bg-white"><div className="divide-y divide-border lg:hidden">{users.map((user) => <MobileRow key={user.staffId} user={user} />)}</div><table className="hidden w-full text-left text-sm lg:table"><thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Nombre</th><th className="px-4 py-3">Rol</th><th className="px-4 py-3">Correo</th><th className="px-4 py-3">Estado</th><th className="w-16 px-4 py-3"><span className="sr-only">Acciones</span></th></tr></thead><tbody className="divide-y divide-border">{users.map((user) => <tr key={user.staffId}><td className="px-4 py-3 font-medium">{user.name}</td><td className="px-4 py-3 text-muted-foreground">{roleLabel(user.role)}</td><td className="px-4 py-3 text-muted-foreground">{user.email ?? 'Pendiente de registro'}</td><td className="px-4 py-3"><Status status={user.status} /></td><td className="px-4 py-3"><UserActions user={user} /></td></tr>)}</tbody></table>{!users.length && <p className="px-4 py-10 text-center text-sm text-muted-foreground">No hay usuarios administrativos.</p>}</div></section></div>
+}
+
+function MobileRow({ user }: { user: AdminUser }) { return <div className="flex items-center gap-3 px-4 py-3"><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{user.name}</p><p className="mt-1 text-xs text-muted-foreground">{roleLabel(user.role)} · {user.email ?? 'Correo pendiente'}</p><p className="mt-1"><Status status={user.status} /></p></div><UserActions user={user} /></div> }
+function roleLabel(role: AdminUser['role']) { return role === 'MASTER' ? 'Master' : 'Administrativo' }
+function Status({ status }: { status: AdminUserStatus }) { const labels: Record<AdminUserStatus, string> = { INVITATION_PENDING: 'Invitación pendiente', WAITING_CONFIRMATION: 'Esperando confirmación', INVITATION_EXPIRED: 'Invitación expirada', INVITATION_REVOKED: 'Invitación revocada', ACCESS_ACTIVE: 'Acceso activo', ACCESS_INACTIVE: 'Acceso inactivo' }; return <span className="text-xs text-muted-foreground">{labels[status]}</span> }

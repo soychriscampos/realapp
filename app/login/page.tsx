@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/server'
 import { getHomeRoute } from '@/lib/auth/home-route'
 import { login } from './actions'
@@ -37,16 +38,25 @@ export default async function LoginPage({
       ? 'Correo o contraseña incorrectos.'
       : error === 'missing'
         ? 'Ingresa tu correo y contraseña.'
-        : error === 'unauthorized'
-          ? 'Tu cuenta no tiene acceso activo al sistema.'
+      : error === 'unauthorized'
+        ? 'Tu cuenta no tiene acceso activo al sistema.'
+        : error === 'onboarding'
+          ? 'Confirmamos tu correo, pero no pudimos terminar de configurar tu acceso. Intenta de nuevo o contacta al administrador.'
           : null
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-[#f7f7f8] px-5 py-10 sm:px-6">
       <div className="w-full max-w-[360px]">
         <div className="mb-10 text-center">
-          <div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-xl border border-border bg-white text-lg font-semibold tracking-tight">
-            REAL
+          <div className="mx-auto mb-6 flex size-14 items-center justify-center">
+            <Image
+              src="/logo-real.png"
+              alt="REAL"
+              width={56}
+              height={56}
+              className="size-14 object-contain"
+              priority
+            />
           </div>
 
           <h1 className="text-2xl font-semibold tracking-tight">

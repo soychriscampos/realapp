@@ -13,8 +13,10 @@ import {
   Search,
   Settings,
   Users,
+  UserRound,
   X,
 } from "lucide-react"
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { ReactNode } from "react"
@@ -28,12 +30,14 @@ type AdminShellProps = {
   children: ReactNode
   roleLabel: string
   userName: string | null
+  canManageUsers?: boolean
 }
 
 const primaryNavigation = [
   { label: "Inicio", href: "/admin", icon: Home },
   { label: "Alumnos", href: "/admin/alumnos", icon: Users },
   { label: "Reportes", href: "/admin/reportes", icon: BarChart3 },
+  { label: "Usuarios", href: "/admin/usuarios", icon: UserRound },
   { label: "Configuración", href: "/admin/configuracion", icon: Settings },
 ]
 
@@ -42,13 +46,10 @@ const mobileNavigation = [
   { label: "Alumnos", href: "/admin/alumnos", icon: Users },
 ]
 
-const moreNavigation = primaryNavigation.filter(
-  (item) => !["Inicio", "Alumnos"].includes(item.label)
-)
-
-export function AdminShell({ children, roleLabel, userName }: AdminShellProps) {
+export function AdminShell({ children, roleLabel, userName, canManageUsers = false }: AdminShellProps) {
   const pathname = usePathname()
   const showDesktopSearch = pathname !== "/admin"
+  const navigation = canManageUsers ? primaryNavigation : primaryNavigation.filter((item) => item.label !== "Usuarios")
 
   return (
     <ToasterProvider>
@@ -57,8 +58,8 @@ export function AdminShell({ children, roleLabel, userName }: AdminShellProps) {
         <aside className="flex w-[232px] shrink-0 flex-col bg-white">
           <div className="flex h-14 shrink-0 items-center border-b border-border px-4">
             <Link href="/admin" className="flex min-w-0 items-center gap-2.5">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-white text-xs font-semibold">
-                REAL
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white">
+                <Image src="/logo-real.png" alt="REAL" width={32} height={32} className="size-7 object-contain" priority />
               </span>
               <span className="min-w-0">
                 <span className="block text-sm font-semibold">
@@ -69,18 +70,18 @@ export function AdminShell({ children, roleLabel, userName }: AdminShellProps) {
           </div>
 
           <nav className="flex-1 space-y-5 border-r border-border px-3 py-4">
-            <NavigationGroup items={primaryNavigation.slice(0, 1)} />
+            <NavigationGroup items={navigation.slice(0, 1)} />
             <NavigationGroup
               label="Gestión"
-              items={primaryNavigation.slice(1, 2)}
+              items={navigation.slice(1, 2)}
             />
             <NavigationGroup
               label="Operación"
-              items={primaryNavigation.slice(2, 3)}
+              items={navigation.slice(2, 3)}
             />
             <NavigationGroup
               label="Sistema"
-              items={primaryNavigation.slice(3)}
+              items={navigation.slice(3)}
             />
           </nav>
 
@@ -124,7 +125,7 @@ export function AdminShell({ children, roleLabel, userName }: AdminShellProps) {
           {children}
         </main>
 
-        <MobileBottomNavigation />
+        <MobileBottomNavigation navigation={navigation} />
         </div>
       </div>
     </ToasterProvider>
@@ -216,12 +217,12 @@ function UserMenu({
         <span
           className={cn(
             "hidden min-w-0 sm:flex",
-            compact ? "items-center gap-1 whitespace-nowrap" : "flex-col"
+            "flex-col"
           )}
         >
           <span className="truncate font-medium">{displayName}</span>
           <span className="truncate text-xs text-muted-foreground">
-            {compact ? `· ${roleLabel}` : roleLabel}
+            {roleLabel}
           </span>
         </span>
       </Menu.Trigger>
@@ -251,20 +252,20 @@ function UserMenu({
   )
 }
 
-function MobileBottomNavigation() {
+function MobileBottomNavigation({ navigation }: { navigation: typeof primaryNavigation }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
       <div className="mx-auto grid min-h-16 max-w-md grid-cols-4 items-center gap-1">
         {mobileNavigation.map((item) => (
           <NavigationItem key={item.href} item={item} compact />
         ))}
-        <MoreSheet />
+        <MoreSheet items={navigation.filter((item) => !["Inicio", "Alumnos"].includes(item.label))} />
       </div>
     </nav>
   )
 }
 
-function MoreSheet() {
+function MoreSheet({ items }: { items: typeof primaryNavigation }) {
   return (
     <Dialog.Root>
       <Dialog.Trigger className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg px-2 text-[11px] font-medium text-muted-foreground outline-none transition hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
@@ -289,7 +290,7 @@ function MoreSheet() {
               Navegación secundaria administrativa
             </Dialog.Description>
             <div className="space-y-1">
-              {moreNavigation.map((item) => {
+              {items.map((item) => {
                 const Icon = item.icon
 
                 return (

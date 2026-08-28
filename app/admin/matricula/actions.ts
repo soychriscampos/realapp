@@ -208,6 +208,7 @@ export type PreregistrationIntakeContact = {
   fullName: string
   phone: string
   email: string
+  viaEmail?: boolean
   relationship: string
 }
 
@@ -228,6 +229,7 @@ export type PreregistrationIntakeStudentDetail = PreregistrationIntakeStudent & 
     gradeLevelId: string
     groupId: string | null
   } | null
+  hasEmailRecipient: boolean
 }
 
 export type CreatePreregistrationIntakeInput = {
@@ -602,14 +604,14 @@ export async function getPreregistrationIntakeStudent(studentId: string): Promis
       .maybeSingle(),
     supabase
       .from("student_guardians")
-      .select("guardian_id, relationship, priority, guardians!inner(id, full_name, phone, email)")
+    .select("guardian_id, relationship, priority, via_email, guardians!inner(id, full_name, phone, email)")
       .eq("student_id", studentId)
       .eq("is_active", true)
       .order("priority")
       .limit(2),
     supabase
       .from("enrollments")
-      .select("status, enrolled_on, cycle_id, school_cycles!inner(id, name, starts_on), grade_levels!inner(id, name, education_level_id, sort_order, education_levels!inner(id, name)), groups(id, name, code)")
+      .select("status, enrolled_on, cycle_id, school_cycles!inner(id, name, starts_on), grade_levels!inner(id, name, education_level_id, sort_order, education_levels!inner(id, name, sort_order)), groups(id, name, code)")
       .eq("student_id", studentId)
       .order("enrolled_on", { ascending: false })
       .limit(12),
@@ -627,27 +629,35 @@ export async function getPreregistrationIntakeStudent(studentId: string): Promis
 
   let suggestedDestination: PreregistrationIntakeStudentDetail["suggestedDestination"] = null
   if (latestCycle && latestGrade && latestLevel) {
-    const [nextCycleResult, nextGradeResult] = await Promise.all([
-      supabase
-        .from("school_cycles")
-        .select("id, name, starts_on")
-        .gt("starts_on", latestCycle.starts_on)
-        .order("starts_on", { ascending: true })
-        .limit(1)
-        .maybeSingle(),
-      supabase
+    const nextCycleResult = await supabase
+      .from("school_cycles")
+      .select("id, name, starts_on")
+      .gt("starts_on", latestCycle.starts_on)
+      .order("starts_on", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    const nextLevelResult = await supabase
+      .from("education_levels")
+      .select("id, name, sort_order")
+      .eq("is_active", true)
+      .gt("sort_order", latestLevel.sort_order)
+      .order("sort_order", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    const nextGradeResult = nextLevelResult.data
+      ? await supabase
         .from("grade_levels")
-        .select("id, name, education_level_id, sort_order")
-        .eq("education_level_id", latestGrade.education_level_id)
-        .gt("sort_order", latestGrade.sort_order)
+        .select("id, name, sort_order")
+        .eq("education_level_id", nextLevelResult.data.id)
+        .eq("is_active", true)
         .order("sort_order", { ascending: true })
         .limit(1)
-        .maybeSingle(),
-    ])
+        .maybeSingle()
+      : { data: null, error: null }
 
     const nextCycle = nextCycleResult.data
     const nextGrade = nextGradeResult.data
-    if (!nextCycleResult.error && !nextGradeResult.error && nextCycle && nextGrade) {
+    if (!nextCycleResult.error && !nextLevelResult.error && !nextGradeResult.error && nextCycle && nextLevelResult.data && nextGrade) {
       const { data: nextGroups } = await supabase
         .from("groups")
         .select("id, code")
@@ -660,7 +670,7 @@ export async function getPreregistrationIntakeStudent(studentId: string): Promis
       const groupId = nextGroups?.length === 1 ? nextGroups[0].id : matchingGroup?.id ?? null
       suggestedDestination = {
         cycleId: nextCycle.id,
-        educationLevelId: latestGrade.education_level_id,
+        educationLevelId: nextLevelResult.data.id,
         gradeLevelId: nextGrade.id,
         groupId,
       }
@@ -680,6 +690,7 @@ export async function getPreregistrationIntakeStudent(studentId: string): Promis
           fullName: guardian.full_name,
           phone: guardian.phone ?? "",
           email: guardian.email ?? "",
+          viaEmail: contact.via_email === true,
           relationship: contact.relationship,
         }]
       }),
@@ -700,6 +711,10 @@ export async function getPreregistrationIntakeStudent(studentId: string): Promis
           }
         : null,
       suggestedDestination,
+      hasEmailRecipient: (contactsResult.data ?? []).some((contact) => {
+        const guardian = Array.isArray(contact.guardians) ? contact.guardians[0] : contact.guardians
+        return contact.via_email === true && typeof guardian?.email === "string" && guardian.email.trim().length > 0
+      }),
     },
     error: false,
   }

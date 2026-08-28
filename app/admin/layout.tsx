@@ -12,5 +12,5 @@ export default async function AdminLayout({
   const profileResult = await getCurrentUserProfile(supabase, userId, roles.filter((role): role is 'MASTER' | 'ADMINISTRATIVO' => role === 'MASTER' || role === 'ADMINISTRATIVO'), email)
   const userName = profileResult.data?.displayName ?? null
 
-  return <AdminShell roleLabel={roleLabel} userName={userName}>{children}</AdminShell>
+  return <AdminShell roleLabel={roleLabel} userName={userName} canManageUsers={roles.includes('MASTER')}>{children}</AdminShell>
 }

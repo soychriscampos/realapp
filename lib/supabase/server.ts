@@ -26,3 +26,22 @@ export async function createClient() {
     }
   )
 }
+
+// Cliente sin cookies de sesión para rutas públicas que usan RPCs anon.
+// Evita que una cookie Auth inválida convierta una lectura pública en un refresh fallido.
+export function createPublicClient() {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return []
+        },
+        setAll() {
+          // Las rutas públicas no deben crear ni refrescar cookies Auth.
+        },
+      },
+    }
+  )
+}
