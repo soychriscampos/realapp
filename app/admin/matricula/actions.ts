@@ -137,6 +137,7 @@ type BulkEnrollmentItem = {
   classesStartOn: string | null
   economicStartOn: string
   initialPeriodAmount: string | null
+  initialPeriodDueDate: string | null
   enrollmentFeeMode: "FULL" | null
   reason: string
 }
@@ -1302,6 +1303,9 @@ export async function bulkCreateAndActivateEnrollments(input: {
     if (item.classesStartOn && !isDate(item.classesStartOn)) {
       return { ok: false, message: "Captura una fecha válida de inicio de clases." }
     }
+    if (item.initialPeriodDueDate && !isDate(item.initialPeriodDueDate)) {
+      return { ok: false, message: "Captura una fecha válida para el primer cobro." }
+    }
     if (!item.reason.trim()) return { ok: false, message: "Indica el motivo de la activación." }
     if (item.initialPeriodAmount && (!Number.isFinite(Number(item.initialPeriodAmount)) || Number(item.initialPeriodAmount) < 0)) {
       return { ok: false, message: "El importe del primer periodo debe ser válido." }
@@ -1320,7 +1324,7 @@ export async function bulkCreateAndActivateEnrollments(input: {
       classes_start_on: cleanText(item.classesStartOn),
       economic_start_on: item.economicStartOn,
       initial_period_amount: cleanText(item.initialPeriodAmount),
-      initial_period_due_date: null,
+      initial_period_due_date: cleanText(item.initialPeriodDueDate),
       enrollment_fee_mode: item.enrollmentFeeMode,
       enrollment_fee_amount: null,
       reason: item.reason.trim(),

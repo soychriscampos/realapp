@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { BulkEnrollmentCandidate } from "@/lib/admin/bulk-enrollment"
 import { getEnrollmentGroupLabel, type EnrollmentFinancialCoverage } from "@/lib/admin/enrollments"
+import { getInitialPeriodState } from "@/lib/admin/enrollment-initial-period"
 
 type Cycle = { id: string; name: string; starts_on: string }
 type Level = { id: string; name: string; sort_order: number }
@@ -61,6 +62,8 @@ export function BulkEnrollmentActivationSheet({
   const [activatedOn, setActivatedOn] = useState(cycle.starts_on)
   const [classesStartOn, setClassesStartOn] = useState(cycle.starts_on)
   const [economicStartOn, setEconomicStartOn] = useState(cycle.starts_on)
+  const [initialPeriodDecision, setInitialPeriodDecision] = useState<"WAIVE" | "CHARGE">("WAIVE")
+  const [initialPeriodDueDate, setInitialPeriodDueDate] = useState("")
   const [reason, setReason] = useState("")
   const [feeCoverage, setFeeCoverage] = useState<Record<string, boolean> | null>(null)
   const [results, setResults] = useState<BulkEnrollmentResult[]>([])
@@ -70,12 +73,19 @@ export function BulkEnrollmentActivationSheet({
   const toastManager = Toast.useToastManager()
 
   const selectedCandidates = candidates.filter((candidate) => configurations[candidate.studentId]?.selected)
+  const hasPreOrdinaryPeriod = selectedCandidates.some((candidate) => {
+    const configuration = configurations[candidate.studentId]
+    return getCandidateInitialPeriodState(configuration, grades, financialCoverage, cycle.id, economicStartOn).isBeforeFirstOrdinaryPeriod
+  })
+  const initialPeriodChargeSelected = !hasPreOrdinaryPeriod || initialPeriodDecision === "CHARGE"
   function reset() {
     setStep("candidates")
     setConfigurations(initialConfigurations(candidates, levels, grades, groups, classifications, cycle.id))
     setActivatedOn(cycle.starts_on)
     setClassesStartOn(cycle.starts_on)
     setEconomicStartOn(cycle.starts_on)
+    setInitialPeriodDecision("WAIVE")
+    setInitialPeriodDueDate("")
     setReason("")
     setFeeCoverage(null)
     setResults([])
@@ -115,10 +125,15 @@ export function BulkEnrollmentActivationSheet({
       economicStartOn,
       activatedOn,
       classesStartOn,
-      reason
+      reason,
+      initialPeriodChargeSelected
     )
     if (validationMessage) {
       setError(validationMessage)
+      return
+    }
+    if (hasPreOrdinaryPeriod && initialPeriodDecision === "CHARGE" && !isDate(initialPeriodDueDate)) {
+      setError("Captura la fecha de vencimiento del tramo previo.")
       return
     }
 
@@ -152,10 +167,11 @@ export function BulkEnrollmentActivationSheet({
             groupId: configuration.groupId,
             activatedOn,
             classesStartOn: classesStartOn || null,
-            economicStartOn,
-            initialPeriodAmount: needsInitialAmount(candidate, configuration, grades, financialCoverage, cycle.id, economicStartOn)
+            economicStartOn: economicStartForRpc(candidate, configuration, grades, financialCoverage, cycle.id, economicStartOn, initialPeriodDecision),
+            initialPeriodAmount: needsInitialAmount(candidate, configuration, grades, financialCoverage, cycle.id, economicStartOn) && initialPeriodChargeSelected
               ? configuration.initialPeriodAmount || null
               : null,
+            initialPeriodDueDate: getCandidateInitialPeriodState(configuration, grades, financialCoverage, cycle.id, economicStartOn).isBeforeFirstOrdinaryPeriod && initialPeriodChargeSelected ? initialPeriodDueDate || null : null,
             enrollmentFeeMode: feeCoverage[candidate.studentId] ? null : "FULL",
             reason,
           }
@@ -234,13 +250,14 @@ export function BulkEnrollmentActivationSheet({
                   <Field label="Inicio de clases"><Input type="date" value={classesStartOn} onChange={(event) => setClassesStartOn(event.target.value)} /></Field>
                   <Field label="Inicio económico"><Input type="date" value={economicStartOn} onChange={(event) => { setEconomicStartOn(event.target.value); setFeeCoverage(null) }} /></Field>
                 </div>
+                {hasPreOrdinaryPeriod && <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4"><p className="text-sm font-medium">Tramo previo al primer periodo ordinario</p><p className="text-sm text-muted-foreground">Elige si genera un cobro antes del primer periodo ordinario.</p><div className="grid gap-2"><Choice label="No cobrarlo" checked={initialPeriodDecision === "WAIVE"} onChange={() => { setInitialPeriodDecision("WAIVE"); setInitialPeriodDueDate("") }} /><Choice label="Cobrarlo" checked={initialPeriodDecision === "CHARGE"} onChange={() => setInitialPeriodDecision("CHARGE")} /></div>{initialPeriodDecision === "CHARGE" && <Field label="Fecha de vencimiento"><Input type="date" value={initialPeriodDueDate} onChange={(event) => setInitialPeriodDueDate(event.target.value)} /></Field>}</div>}
                 <Field label="Motivo"><Textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ej. Activación de continuidad para el nuevo ciclo" rows={3} /></Field>
                 <div className="space-y-3">
                   <div><h3 className="text-sm font-semibold">Configuración por alumno</h3><p className="mt-1 text-sm text-muted-foreground">El plan predeterminado de 12 pagos se aplicará mediante la activación canónica.</p></div>
                   {selectedCandidates.map((candidate) => {
                     const configuration = configurations[candidate.studentId]
                     const availableGroups = groups.filter((group) => group.cycle_id === cycle.id && group.grade_level_id === configuration.gradeLevelId)
-                    const requiresInitialAmount = needsInitialAmount(candidate, configuration, grades, financialCoverage, cycle.id, economicStartOn)
+                    const requiresInitialAmount = needsInitialAmount(candidate, configuration, grades, financialCoverage, cycle.id, economicStartOn) && initialPeriodChargeSelected
                     return <article key={candidate.studentId} className="space-y-4 border-y border-border py-4 first:border-t-0">
                       <div><p className="font-medium">{candidate.fullName}</p><p className="mt-1 text-sm text-muted-foreground">Antes: {candidate.previousGrade.educationLevelName} {candidate.previousGrade.name} · {statusLabel(candidate.previousStatus)}</p></div>
                       <div className="grid gap-4 sm:grid-cols-3">
@@ -265,8 +282,10 @@ export function BulkEnrollmentActivationSheet({
                     const grade = grades.find((item) => item.id === configuration.gradeLevelId)
                     const group = groups.find((item) => item.id === configuration.groupId)
                     const classification = classifications.find((item) => item.id === configuration.classificationId)
-                    const initialAmount = needsInitialAmount(candidate, configuration, grades, financialCoverage, cycle.id, economicStartOn) ? configuration.initialPeriodAmount : null
-                    return <div key={candidate.studentId} className="border-b border-border px-4 py-3 last:border-b-0"><p className="font-medium">{candidate.fullName}</p><p className="mt-1 text-sm text-muted-foreground">{grade ? gradeLabel(grade, levels) : ""}{group ? ` · ${getEnrollmentGroupLabel(group)}` : ""} · {classification?.name ?? ""}</p><p className="mt-1 text-sm text-muted-foreground">{initialAmount ? `Primer periodo acordado: $${initialAmount}` : "Inicio de periodo · colegiatura vigente"}</p><p className="mt-1 text-sm text-muted-foreground">{feeCoverage[candidate.studentId] ? "Inscripción cubierta para este ciclo" : "Inscripción completa por generar"}</p></div>
+                    const initialAmount = needsInitialAmount(candidate, configuration, grades, financialCoverage, cycle.id, economicStartOn) && initialPeriodChargeSelected ? configuration.initialPeriodAmount : null
+                    const initialState = getCandidateInitialPeriodState(configuration, grades, financialCoverage, cycle.id, economicStartOn)
+                    const initialLabel = initialState.isBeforeFirstOrdinaryPeriod && !initialPeriodChargeSelected ? `Primera colegiatura desde ${formatDate(initialState.firstOrdinaryPeriodStart ?? "")}` : initialAmount ? initialState.isBeforeFirstOrdinaryPeriod ? `Periodo previo acordado: $${initialAmount} · vence ${formatDate(initialPeriodDueDate)}` : `Primer periodo acordado: $${initialAmount}` : "Inicio de periodo · colegiatura vigente"
+                    return <div key={candidate.studentId} className="border-b border-border px-4 py-3 last:border-b-0"><p className="font-medium">{candidate.fullName}</p><p className="mt-1 text-sm text-muted-foreground">{grade ? gradeLabel(grade, levels) : ""}{group ? ` · ${getEnrollmentGroupLabel(group)}` : ""} · {classification?.name ?? ""}</p><p className="mt-1 text-sm text-muted-foreground">{initialLabel}</p><p className="mt-1 text-sm text-muted-foreground">{feeCoverage[candidate.studentId] ? "Inscripción cubierta para este ciclo" : "Inscripción completa por generar"}</p></div>
                   })}
                 </div>
               </section>
@@ -323,18 +342,28 @@ function defaultGroupId(groups: Group[], cycleId: string, gradeLevelId: string) 
 function needsInitialAmount(candidate: BulkEnrollmentCandidate, configuration: CandidateConfiguration, grades: Grade[], financialCoverage: EnrollmentFinancialCoverage[], cycleId: string, economicStartOn: string) {
   const grade = grades.find((item) => item.id === configuration.gradeLevelId)
   if (!candidate || !grade || !economicStartOn) return false
-  const [year, month, day] = economicStartOn.split("-").map(Number)
-  if (!year || !month || !day || day === 1) return false
-  return financialCoverage.find((coverage) => coverage.cycleId === cycleId && coverage.educationLevelId === grade.education_level_id)?.months.some((item) => item.year === year && item.month === month) ?? false
+  return getInitialPeriodState({ financialCoverage, cycleId, educationLevelId: grade.education_level_id, proposedEconomicStartOn: economicStartOn }).needsInitialAmount
 }
 
-function configurationError(candidates: BulkEnrollmentCandidate[], configurations: Record<string, CandidateConfiguration>, grades: Grade[], cycle: Cycle, groups: Group[], financialCoverage: EnrollmentFinancialCoverage[], economicStartOn: string, activatedOn: string, classesStartOn: string, reason: string) {
+function getCandidateInitialPeriodState(configuration: CandidateConfiguration, grades: Grade[], financialCoverage: EnrollmentFinancialCoverage[], cycleId: string, economicStartOn: string) {
+  const grade = grades.find((item) => item.id === configuration.gradeLevelId)
+  return getInitialPeriodState({ financialCoverage, cycleId, educationLevelId: grade?.education_level_id, proposedEconomicStartOn: economicStartOn })
+}
+
+function economicStartForRpc(candidate: BulkEnrollmentCandidate, configuration: CandidateConfiguration, grades: Grade[], financialCoverage: EnrollmentFinancialCoverage[], cycleId: string, economicStartOn: string, decision: "WAIVE" | "CHARGE") {
+  const state = getCandidateInitialPeriodState(configuration, grades, financialCoverage, cycleId, economicStartOn)
+  return state.isBeforeFirstOrdinaryPeriod && decision === "WAIVE"
+    ? state.firstOrdinaryPeriodStart ?? economicStartOn
+    : economicStartOn
+}
+
+function configurationError(candidates: BulkEnrollmentCandidate[], configurations: Record<string, CandidateConfiguration>, grades: Grade[], cycle: Cycle, groups: Group[], financialCoverage: EnrollmentFinancialCoverage[], economicStartOn: string, activatedOn: string, classesStartOn: string, reason: string, initialPeriodChargeSelected: boolean) {
   if (![activatedOn, classesStartOn, economicStartOn].every(isDate)) return "Captura fechas válidas para la activación."
   if (!reason.trim()) return "Indica el motivo de la activación."
   for (const candidate of candidates) {
     const configuration = configurations[candidate.studentId]
     if (!configuration.gradeLevelId || !configuration.groupId || !configuration.classificationId) return `Completa grado, grupo y clasificación para ${candidate.fullName}.`
-    if (needsInitialAmount(candidate, configuration, grades, financialCoverage, cycle.id, economicStartOn) && (!configuration.initialPeriodAmount.trim() || !Number.isFinite(Number(configuration.initialPeriodAmount)) || Number(configuration.initialPeriodAmount) < 0)) return `Captura el importe acordado del primer periodo para ${candidate.fullName}.`
+    if (needsInitialAmount(candidate, configuration, grades, financialCoverage, cycle.id, economicStartOn) && initialPeriodChargeSelected && (!configuration.initialPeriodAmount.trim() || !Number.isFinite(Number(configuration.initialPeriodAmount)) || Number(configuration.initialPeriodAmount) < 0)) return `Captura el importe acordado del primer periodo para ${candidate.fullName}.`
     if (!groups.some((group) => group.id === configuration.groupId && group.cycle_id === cycle.id && group.grade_level_id === configuration.gradeLevelId)) return `El grupo seleccionado no es válido para ${candidate.fullName}.`
   }
   return null
@@ -342,6 +371,10 @@ function configurationError(candidates: BulkEnrollmentCandidate[], configuration
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <Label className="grid gap-1.5 text-sm font-medium"><span>{label}</span>{children}</Label>
+}
+
+function Choice({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
+  return <label className="flex min-h-10 items-center gap-3 rounded-lg border border-border px-3 text-sm font-medium"><input type="radio" checked={checked} onChange={onChange} />{label}</label>
 }
 
 function Summary({ label, value }: { label: string; value: string }) {

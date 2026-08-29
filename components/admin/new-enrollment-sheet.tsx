@@ -3,7 +3,7 @@
 import { Dialog } from "@base-ui/react/dialog"
 import { CheckCircle2, ChevronLeft, LoaderCircle, Plus, Search, X } from "lucide-react"
 import Link from "next/link"
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 
 import { createEnrollment, createNewStudentEnrollment, getEnrollmentFeeCoverage, getNewEnrollmentFinancialOptions, type CreateNewStudentEnrollmentResult } from "@/app/admin/matricula/actions"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,7 @@ import type { PaymentFormContext } from "@/lib/admin/payments"
 import type { StudentChargeBalance } from "@/lib/admin/student-account"
 import { calculateTuitionDiscountPreview, formatCurrency, formatTuitionDiscountValue, tuitionDiscountTypeLabel } from "@/lib/admin/tuition-discount-preview"
 import type { TuitionDiscountCategory } from "@/lib/admin/discount-categories"
+import { getInitialPeriodState, getFirstOrdinaryPeriodStart } from "@/lib/admin/enrollment-initial-period"
 import { searchStudents, type StudentSearchResult } from "@/lib/admin/students"
 import { createClient } from "@/lib/supabase/client"
 import { RegisterPaymentSheet } from "@/components/admin/register-payment-sheet"
@@ -103,41 +104,20 @@ export function NewEnrollmentSheet({
     (group) => group.cycle_id === cycleId && group.grade_level_id === gradeLevelId
   )
   const groupLabel = selectedGroup ? getEnrollmentGroupLabel(selectedGroup) : ""
-  const firstOrdinaryPeriodStart = useMemo(() => {
-    if (!selectedGrade) return null
-    const coverage = financialCoverage.find(
-      (item) => item.cycleId === cycleId && item.educationLevelId === selectedGrade.education_level_id
-    )
-    if (!coverage?.months.length) return null
-
-    const firstOrdinaryPeriod = coverage.months.reduce((earliest, item) =>
-      item.year * 12 + item.month < earliest.year * 12 + earliest.month ? item : earliest
-    )
-    return `${firstOrdinaryPeriod.year}-${String(firstOrdinaryPeriod.month).padStart(2, "0")}-01`
-  }, [cycleId, financialCoverage, selectedGrade])
-
-  const showInitialPeriodDecision = Boolean(newStudentMode && firstOrdinaryPeriodStart && activatedOn && activatedOn < firstOrdinaryPeriodStart)
-  const needsInitialAmount = useMemo(() => {
-    if (!activatedOn) return false
-    if (showInitialPeriodDecision) return true
-
-    const [year, month, day] = activatedOn.split("-").map(Number)
-    if (!year || !month || !day) return false
-    const coverage = financialCoverage.find(
-      (item) => item.cycleId === cycleId && item.educationLevelId === selectedGrade?.education_level_id
-    )
-    if (!coverage?.months.length) return false
-
-    const startsDuringConfiguredPeriod = coverage.months.some((item) => item.year === year && item.month === month)
-    return startsDuringConfiguredPeriod && day > 1
-  }, [activatedOn, cycleId, financialCoverage, selectedGrade, showInitialPeriodDecision])
+  const firstOrdinaryPeriodStart = getFirstOrdinaryPeriodStart(financialCoverage, cycleId, selectedGrade?.education_level_id)
+  const initialPeriodState = getInitialPeriodState({
+    financialCoverage,
+    cycleId,
+    educationLevelId: selectedGrade?.education_level_id,
+    proposedEconomicStartOn: activatedOn,
+  })
+  const showInitialPeriodDecision = initialPeriodState.isBeforeFirstOrdinaryPeriod
+  const needsInitialAmount = initialPeriodState.needsInitialAmount
 
   const initialPeriodChargeSelected = !showInitialPeriodDecision || initialPeriodDecision === "CHARGE"
   const economicStartForRpc = showInitialPeriodDecision && initialPeriodDecision === "WAIVE"
     ? firstOrdinaryPeriodStart ?? activatedOn
-    : showInitialPeriodDecision && initialPeriodDecision === "CHARGE"
-      ? activatedOn
-      : activatedOn
+    : activatedOn
   const selectedDiscountCategory = discountCategories.find((category) => category.id === discountCategoryId) ?? null
   const selectedDiscountVersion = selectedDiscountCategory?.versions
     .filter((version) => version.validFrom <= activatedOn && (!version.validUntil || version.validUntil >= activatedOn))
@@ -146,22 +126,22 @@ export function NewEnrollmentSheet({
     ? calculateTuitionDiscountPreview(baseAmount, selectedDiscountCategory.discountType, selectedDiscountVersion.value)
     : null
   const individualAmount = discountPreview?.agreedAmount ?? baseAmount
-  const suggestedInitialAmount = useMemo(() => {
+  const suggestedInitialAmount = (() => {
     if (!needsInitialAmount || individualAmount === null || !activatedOn) return ""
     const [year, month, day] = activatedOn.split("-").map(Number)
     if (!year || !month || !day) return ""
     const daysInMonth = new Date(year, month, 0).getDate()
     const applicableDays = daysInMonth - day + 1
     return (Math.round(individualAmount * applicableDays / daysInMonth * 100) / 100).toFixed(2)
-  }, [activatedOn, individualAmount, needsInitialAmount])
-  const ordinaryPeriod = useMemo(() => {
+  })()
+  const ordinaryPeriod = (() => {
     if (!activatedOn || !selectedGrade) return null
     const [year, month] = activatedOn.split("-").map(Number)
     const coverage = financialCoverage.find(
       (item) => item.cycleId === cycleId && item.educationLevelId === selectedGrade.education_level_id
     )
     return coverage?.months.find((item) => item.year === year && item.month === month) ?? null
-  }, [activatedOn, cycleId, financialCoverage, selectedGrade])
+  })()
 
   useEffect(() => {
     if (!newStudentMode || !educationLevelId || !cycleId || !activatedOn) return
@@ -477,7 +457,7 @@ export function NewEnrollmentSheet({
             )}
 
             {step === "review" && (student || newStudentMode) && (
-              <section className="space-y-5"><div><h2 className="text-lg font-semibold">Resumen de matrícula</h2><p className="mt-1 text-sm text-muted-foreground">Revisa la información antes de activar la matrícula.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={newStudentMode ? studentFullName : student?.fullName ?? ""} /><Summary label="Ciclo" value={selectedCycle?.name ?? ""} /><Summary label="Grado" value={`${selectedLevel?.name ?? ""}${selectedLevel ? " " : ""}${selectedGrade?.name ?? ""}${groupLabel ? ` ${groupLabel}` : ""}`} /><Summary label="Clasificación" value={selectedClassification?.name ?? ""} /><Summary label="Fecha efectiva de ingreso" value={formatDate(activatedOn)} />{newStudentMode && <><Summary label="Beneficio" value={selectedDiscountCategory?.name ?? "Sin beneficio"} /><Summary label="Colegiatura base" value={baseAmount === null ? "Sin dato" : formatCurrency(baseAmount)} /><Summary label="Colegiatura individual" value={individualAmount === null ? "Sin dato" : formatCurrency(individualAmount)} /></>}<Summary label="Plan" value="12 pagos predeterminado" /><Summary label="Colegiatura inicial" value={!needsInitialAmount ? "Inicio de periodo · colegiatura vigente" : !initialPeriodChargeSelected ? "No cobrar este periodo" : showInitialPeriodDecision ? `$${initialPeriodAmount || "0.00"} acordado · vence ${formatDate(initialPeriodDueDate)}` : `$${initialPeriodAmount || "0.00"} acordado`} /><Summary label="Inscripción" value={enrollmentFeeCoverage === "covered" ? "Inscripción cubierta para este ciclo" : enrollmentFeeMode === "PROPORTIONAL" ? `Inscripción proporcional · $${enrollmentFeeAmount || "0.00"}` : "Inscripción completa"} /></dl></section>
+              <section className="space-y-5"><div><h2 className="text-lg font-semibold">Resumen de matrícula</h2><p className="mt-1 text-sm text-muted-foreground">Revisa la información antes de activar la matrícula.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={newStudentMode ? studentFullName : student?.fullName ?? ""} /><Summary label="Ciclo" value={selectedCycle?.name ?? ""} /><Summary label="Grado" value={`${selectedLevel?.name ?? ""}${selectedLevel ? " " : ""}${selectedGrade?.name ?? ""}${groupLabel ? ` ${groupLabel}` : ""}`} /><Summary label="Clasificación" value={selectedClassification?.name ?? ""} /><Summary label="Fecha efectiva de ingreso" value={formatDate(activatedOn)} />{newStudentMode && <><Summary label="Beneficio" value={selectedDiscountCategory?.name ?? "Sin beneficio"} /><Summary label="Colegiatura base" value={baseAmount === null ? "Sin dato" : formatCurrency(baseAmount)} /><Summary label="Colegiatura individual" value={individualAmount === null ? "Sin dato" : formatCurrency(individualAmount)} /></>}<Summary label="Plan" value="12 pagos predeterminado" /><Summary label="Colegiatura inicial" value={!needsInitialAmount ? "Inicio de periodo · colegiatura vigente" : !initialPeriodChargeSelected ? `Primera colegiatura desde ${formatDate(firstOrdinaryPeriodStart ?? "")}` : showInitialPeriodDecision ? `Periodo previo · $${initialPeriodAmount || "0.00"} acordado · vence ${formatDate(initialPeriodDueDate)}` : `$${initialPeriodAmount || "0.00"} acordado`} /><Summary label="Inscripción" value={enrollmentFeeCoverage === "covered" ? "Inscripción cubierta para este ciclo" : enrollmentFeeMode === "PROPORTIONAL" ? `Inscripción proporcional · $${enrollmentFeeAmount || "0.00"}` : "Inscripción completa"} /></dl></section>
             )}
 
             {step === "payment" && createdStudentId && <section className="space-y-5"><div><h2 className="text-lg font-semibold">Pago pendiente</h2><p className="mt-1 text-sm text-muted-foreground">La matrícula quedó activa y tiene cargos pendientes.</p></div><div className="rounded-lg border border-border bg-muted/30 p-4 text-sm">Puedes registrar el pago ahora o hacerlo después desde la cuenta del alumno.</div><div className="flex flex-wrap gap-2"><Button type="button" onClick={() => setPaymentOpen(true)}>Registrar pago</Button><Button type="button" variant="outline" onClick={() => setStep("success")}>Registrar después</Button></div></section>}
