@@ -57,6 +57,9 @@ export type StudentSearchResult = {
   gradeName: string | null
   groupName: string | null
   status: string
+  gradeLevelId: string | null
+  groupId: string | null
+  classificationId: string | null
 }
 
 type RelatedRecord = Record<string, unknown> | null
@@ -217,7 +220,7 @@ export async function searchStudents(
   cycleId?: string
 ): Promise<{ data: StudentSearchResult[]; error: boolean }> {
   const enrollmentSelection = cycleId
-    ? ", enrollments(id, status, cycle_id, enrolled_on, grade_levels(name), groups(name))"
+    ? ", enrollments(id, status, cycle_id, enrolled_on, grade_level_id, group_id, classification_id, grade_levels(name), groups(name))"
     : ""
   const selection: string = `id, full_name${enrollmentSelection}`
 
@@ -248,6 +251,9 @@ export async function searchStudents(
         gradeName: grade ? asText(grade.name) : null,
         groupName: group ? asText(group.name) : null,
         status: enrollment ? asText(enrollment.status) : "",
+        gradeLevelId: enrollment ? asText(enrollment.grade_level_id) || null : null,
+        groupId: enrollment ? asText(enrollment.group_id) || null : null,
+        classificationId: enrollment ? asText(enrollment.classification_id) || null : null,
       }
     }),
     error: false,

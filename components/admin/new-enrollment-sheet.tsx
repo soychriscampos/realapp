@@ -17,14 +17,15 @@ import type { StudentChargeBalance } from "@/lib/admin/student-account"
 import { calculateTuitionDiscountPreview, formatCurrency, formatTuitionDiscountValue, tuitionDiscountTypeLabel } from "@/lib/admin/tuition-discount-preview"
 import type { TuitionDiscountCategory } from "@/lib/admin/discount-categories"
 import { getInitialPeriodState, getFirstOrdinaryPeriodStart } from "@/lib/admin/enrollment-initial-period"
+import { defaultGroupId, nextGradeId } from "@/lib/admin/enrollment-destination"
 import { searchStudents, type StudentSearchResult } from "@/lib/admin/students"
 import { createClient } from "@/lib/supabase/client"
 import { RegisterPaymentSheet } from "@/components/admin/register-payment-sheet"
 import { cn } from "@/lib/utils"
 
 type Cycle = { id: string; name: string; starts_on: string }
-type Grade = { id: string; name: string; education_level_id: string }
-type Level = { id: string; name: string }
+type Grade = { id: string; name: string; education_level_id: string; sort_order: number }
+type Level = { id: string; name: string; sort_order: number }
 type Group = { id: string; name: string; code: string; grade_level_id: string; cycle_id: string }
 type Classification = { id: string; name: string }
 type Step = "student" | "academic" | "financial" | "review" | "payment" | "success"
@@ -101,6 +102,9 @@ export function NewEnrollmentSheet({
   const selectedLevel = levels.find((level) => level.id === educationLevelId) ?? null
   const selectedGroup = groups.find((group) => group.id === groupId) ?? null
   const selectedClassification = classifications.find((item) => item.id === classificationId) ?? null
+  const previousCycle = cycles
+    .filter((cycle) => cycle.starts_on < (selectedCycle?.starts_on ?? ""))
+    .sort((left, right) => right.starts_on.localeCompare(left.starts_on))[0]
   const availableGrades = grades.filter((grade) => grade.education_level_id === educationLevelId)
   const availableGroups = groups.filter(
     (group) => group.cycle_id === cycleId && group.grade_level_id === gradeLevelId
@@ -192,7 +196,7 @@ export function NewEnrollmentSheet({
     let cancelled = false
     const timeout = window.setTimeout(async () => {
       setStudentSearchState("loading")
-      const { data, error: searchError } = await searchStudents(createClient(), value)
+      const { data, error: searchError } = await searchStudents(createClient(), value, previousCycle?.id)
       if (cancelled) return
       setStudentResults(searchError ? [] : data)
       setStudentSearchState(searchError ? "error" : data.length ? "idle" : "empty")
@@ -202,7 +206,7 @@ export function NewEnrollmentSheet({
       cancelled = true
       window.clearTimeout(timeout)
     }
-  }, [student, studentQuery])
+  }, [previousCycle?.id, student, studentQuery])
 
   function next() {
     const message = stepError()
@@ -434,7 +438,7 @@ export function NewEnrollmentSheet({
                 ) : (
                   <>
                     <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={studentQuery} onChange={(event) => { setStudentQuery(event.target.value); setStudentResults([]); setStudentSearchState("idle"); setError(null) }} placeholder="Buscar por nombre..." className="h-11 bg-white pl-10" /></div>
-                    <StudentResults results={studentResults} state={studentSearchState} onSelect={(result) => { setStudent(result); setStudentResults([]); setStudentQuery(result.fullName); setEnrollmentFeeCoverage("idle") }} />
+                    <StudentResults results={studentResults} state={studentSearchState} grades={grades} levels={levels} onSelect={(result) => { const nextGradeLevelId = result.gradeLevelId ? nextGradeId(result.gradeLevelId, grades, levels) : ""; const nextGrade = grades.find((grade) => grade.id === nextGradeLevelId); setStudent(result); setStudentResults([]); setStudentQuery(result.fullName); setEducationLevelId(nextGrade?.education_level_id ?? ""); setGradeLevelId(nextGradeLevelId); setGroupId(nextGradeLevelId ? defaultGroupId(groups, cycleId, nextGradeLevelId) : ""); setClassificationId(result.classificationId && classifications.some((classification) => classification.id === result.classificationId) ? result.classificationId : ""); setEnrollmentFeeCoverage("idle") }} />
                   </>
                 )}
               </section>
@@ -463,7 +467,7 @@ export function NewEnrollmentSheet({
             )}
 
             {step === "review" && (student || newStudentMode) && (
-              <section className="space-y-5"><div><h2 className="text-lg font-semibold">Resumen de matrícula</h2><p className="mt-1 text-sm text-muted-foreground">Revisa la información antes de activar la matrícula.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={newStudentMode ? studentFullName : student?.fullName ?? ""} /><Summary label="Ciclo" value={selectedCycle?.name ?? ""} /><Summary label="Grado" value={`${selectedLevel?.name ?? ""}${selectedLevel ? " " : ""}${selectedGrade?.name ?? ""}${groupLabel ? ` ${groupLabel}` : ""}`} /><Summary label="Clasificación" value={selectedClassification?.name ?? ""} /><Summary label="Fecha efectiva de ingreso" value={formatDate(activatedOn)} /><Summary label="Beneficio" value={selectedDiscountCategory?.name ?? "Sin beneficio"} /><Summary label="Colegiatura base" value={baseAmount === null ? "Sin dato" : formatCurrency(baseAmount)} /><Summary label="Colegiatura individual" value={individualAmount === null ? "Sin dato" : formatCurrency(individualAmount)} /><Summary label="Plan" value="12 pagos predeterminado" /><Summary label="Colegiatura inicial" value={!needsInitialAmount ? "Inicio de periodo · colegiatura vigente" : !initialPeriodChargeSelected ? `Primera colegiatura desde ${formatDate(firstOrdinaryPeriodStart ?? "")}` : showInitialPeriodDecision ? `Periodo previo · $${initialPeriodAmount || "0.00"} acordado · vence ${formatDate(initialPeriodDueDate)}` : `$${initialPeriodAmount || "0.00"} acordado`} /><Summary label="Inscripción" value={enrollmentFeeCoverage === "covered" ? "Inscripción cubierta para este ciclo" : enrollmentFeeMode === "PROPORTIONAL" ? `Inscripción proporcional · $${enrollmentFeeAmount || "0.00"}` : "Inscripción completa"} /></dl></section>
+              <section className="space-y-5"><div><h2 className="text-lg font-semibold">Resumen de matrícula</h2><p className="mt-1 text-sm text-muted-foreground">Revisa la información antes de activar la matrícula.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={newStudentMode ? studentFullName : student?.fullName ?? ""} /><Summary label="Ciclo" value={selectedCycle?.name ?? ""} /><Summary label="Grado" value={`${selectedLevel?.name ?? ""}${selectedLevel ? " " : ""}${selectedGrade?.name ?? ""}${groupLabel ? ` ${groupLabel}` : ""}`} /><Summary label="Clasificación" value={selectedClassification?.name ?? ""} /><Summary label="Fecha efectiva de ingreso" value={formatDate(activatedOn)} /><Summary label="Beneficio" value={selectedDiscountCategory?.name ?? "Sin beneficio"} /><Summary label="Colegiatura base" value={baseAmount === null ? "Sin dato" : formatCurrency(baseAmount)} /><Summary label="Colegiatura individual" value={individualAmount === null ? "Sin dato" : formatCurrency(individualAmount)} /><Summary label="Plan" value="12 pagos predeterminado" /><Summary label="Colegiatura inicial" value={!needsInitialAmount ? "Inicio de periodo · colegiatura vigente" : !initialPeriodChargeSelected ? `Primera colegiatura desde ${formatDate(firstOrdinaryPeriodStart ?? "")}` : showInitialPeriodDecision ? `Periodo previo · $${initialPeriodAmount || "0.00"} acordado · vence ${formatDate(initialPeriodDueDate)}` : `$${initialPeriodAmount || "0.00"} acordado`} /><Summary label="Inscripción" value={enrollmentFeeCoverage === "covered" ? "Inscripción cubierta para este ciclo" : enrollmentFeeMode === "PROPORTIONAL" ? `Inscripción proporcional · $${enrollmentFeeAmount || "0.00"}` : enrollmentFeeMode === "NO_FEE" ? "No paga inscripción" : "Inscripción completa"} /></dl></section>
             )}
 
             {step === "payment" && createdStudentId && <section className="space-y-5"><div><h2 className="text-lg font-semibold">Pago pendiente</h2><p className="mt-1 text-sm text-muted-foreground">La matrícula quedó activa y tiene cargos pendientes.</p></div><div className="rounded-lg border border-border bg-muted/30 p-4 text-sm">Puedes registrar el pago ahora o hacerlo después desde la cuenta del alumno.</div><div className="flex flex-wrap gap-2"><Button type="button" onClick={() => setPaymentOpen(true)}>Registrar pago</Button><Button type="button" variant="outline" onClick={() => setStep("success")}>Registrar después</Button></div></section>}
@@ -479,12 +483,12 @@ export function NewEnrollmentSheet({
   )
 }
 
-function StudentResults({ results, state, onSelect }: { results: StudentSearchResult[]; state: "idle" | "loading" | "error" | "empty"; onSelect: (result: StudentSearchResult) => void }) {
+function StudentResults({ results, state, grades, levels, onSelect }: { results: StudentSearchResult[]; state: "idle" | "loading" | "error" | "empty"; grades: Grade[]; levels: Level[]; onSelect: (result: StudentSearchResult) => void }) {
   if (state === "loading") return <div className="rounded-lg border border-border px-4 py-4 text-sm text-muted-foreground">Buscando alumnos...</div>
   if (state === "error") return <div className="rounded-lg border border-border px-4 py-4 text-sm text-muted-foreground">No pudimos buscar alumnos. Inténtalo de nuevo.</div>
   if (state === "empty") return <div className="rounded-lg border border-border px-4 py-4 text-sm text-muted-foreground">No encontramos alumnos con ese nombre.</div>
   if (!results.length) return null
-  return <div className="overflow-hidden rounded-lg border border-border">{results.map((result) => <button key={result.id} type="button" onClick={() => onSelect(result)} className="flex min-h-14 w-full items-center border-b border-border px-4 text-left text-sm last:border-b-0 hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"><span><span className="block font-medium">{result.fullName}</span>{result.gradeName && <span className="mt-1 block text-xs text-muted-foreground">{result.gradeName}{result.groupName ? ` · ${result.groupName}` : ""}</span>}</span></button>)}</div>
+  return <div className="overflow-hidden rounded-lg border border-border">{results.map((result) => { const grade = grades.find((item) => item.id === result.gradeLevelId); const level = levels.find((item) => item.id === grade?.education_level_id); const destination = result.groupName ?? grade?.name ?? result.gradeName; return <button key={result.id} type="button" onClick={() => onSelect(result)} className="flex min-h-14 w-full items-center border-b border-border px-4 text-left text-sm last:border-b-0 hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"><span><span className="block font-medium">{result.fullName}</span>{(level || destination) && <span className="mt-1 block text-xs text-muted-foreground">{level?.name ?? ""}{level && destination ? " · " : ""}{destination ?? ""}</span>}</span></button> })}</div>
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -492,7 +496,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function Choice({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
-  return <label className="flex min-h-10 items-center gap-3 rounded-lg border border-border px-3 text-sm font-medium"><input type="radio" checked={checked} onChange={onChange} />{label}</label>
+  return <label className="flex min-h-9 items-center gap-3 py-1 text-sm font-medium"><input type="radio" checked={checked} onChange={onChange} />{label}</label>
 }
 
 function Summary({ label, value }: { label: string; value: string }) {

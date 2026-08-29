@@ -19,6 +19,7 @@ import type { BulkEnrollmentCandidate } from "@/lib/admin/bulk-enrollment"
 import { getEnrollmentGroupLabel, type EnrollmentFinancialCoverage } from "@/lib/admin/enrollments"
 import { getInitialPeriodState } from "@/lib/admin/enrollment-initial-period"
 import type { TuitionDiscountCategory } from "@/lib/admin/discount-categories"
+import { defaultGroupId, nextGradeId } from "@/lib/admin/enrollment-destination"
 
 type Cycle = { id: string; name: string; starts_on: string }
 type Level = { id: string; name: string; sort_order: number }
@@ -349,21 +350,6 @@ function initialConfigurations(candidates: BulkEnrollmentCandidate[], levels: Le
       enrollmentFeeAmount: "",
     }]
   }))
-}
-
-function nextGradeId(previousGradeId: string, grades: Grade[], levels: Level[]) {
-  const orderedGrades = [...grades].sort((left, right) => {
-    const leftLevel = levels.find((level) => level.id === left.education_level_id)?.sort_order ?? Number.MAX_SAFE_INTEGER
-    const rightLevel = levels.find((level) => level.id === right.education_level_id)?.sort_order ?? Number.MAX_SAFE_INTEGER
-    return leftLevel - rightLevel || left.sort_order - right.sort_order
-  })
-  const index = orderedGrades.findIndex((grade) => grade.id === previousGradeId)
-  return index >= 0 ? orderedGrades[index + 1]?.id ?? "" : ""
-}
-
-function defaultGroupId(groups: Group[], cycleId: string, gradeLevelId: string) {
-  const compatibleGroups = groups.filter((group) => group.cycle_id === cycleId && group.grade_level_id === gradeLevelId)
-  return compatibleGroups.length === 1 ? compatibleGroups[0].id : ""
 }
 
 function needsInitialAmount(candidate: BulkEnrollmentCandidate, configuration: CandidateConfiguration, grades: Grade[], financialCoverage: EnrollmentFinancialCoverage[], cycleId: string, economicStartOn: string) {
