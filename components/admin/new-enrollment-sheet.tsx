@@ -38,6 +38,7 @@ type NewEnrollmentSheetProps = {
   groups: Group[]
   classifications: Classification[]
   financialCoverage: EnrollmentFinancialCoverage[]
+  discountCategories: TuitionDiscountCategory[]
   triggerLabel?: string
   triggerClassName?: string
 }
@@ -50,6 +51,7 @@ export function NewEnrollmentSheet({
   groups,
   classifications,
   financialCoverage,
+  discountCategories: discountCategoryOptions,
   triggerLabel = "Nueva matrícula",
   triggerClassName,
 }: NewEnrollmentSheetProps) {
@@ -77,11 +79,11 @@ export function NewEnrollmentSheet({
   const [initialPeriodDueDate, setInitialPeriodDueDate] = useState("")
   const [initialPeriodDecision, setInitialPeriodDecision] = useState<"WAIVE" | "CHARGE">("WAIVE")
   const [baseAmount, setBaseAmount] = useState<number | null>(null)
-  const [discountCategories, setDiscountCategories] = useState<TuitionDiscountCategory[]>([])
+  const [discountCategories, setDiscountCategories] = useState<TuitionDiscountCategory[]>(discountCategoryOptions)
   const [discountCategoryId, setDiscountCategoryId] = useState("")
   const [financialOptionsState, setFinancialOptionsState] = useState<"idle" | "loading" | "ready" | "error">("idle")
   const [enrollmentFeeCoverage, setEnrollmentFeeCoverage] = useState<"idle" | "loading" | "covered" | "uncovered" | "error">("idle")
-  const [enrollmentFeeMode, setEnrollmentFeeMode] = useState<"FULL" | "PROPORTIONAL">("FULL")
+  const [enrollmentFeeMode, setEnrollmentFeeMode] = useState<"FULL" | "PROPORTIONAL" | "NO_FEE">("FULL")
   const [enrollmentFeeAmount, setEnrollmentFeeAmount] = useState("")
   const [reason, setReason] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -144,7 +146,7 @@ export function NewEnrollmentSheet({
   })()
 
   useEffect(() => {
-    if (!newStudentMode || !educationLevelId || !cycleId || !activatedOn) return
+    if (!educationLevelId || !cycleId || !activatedOn) return
     let cancelled = false
     const request = window.setTimeout(() => {
       setFinancialOptionsState("loading")
@@ -156,13 +158,16 @@ export function NewEnrollmentSheet({
         return
       }
       setBaseAmount(result.data.baseAmount)
-      setDiscountCategories(result.data.discountCategories)
-      setDiscountCategoryId((current) => result.data.discountCategories.some((category) => category.id === current) ? current : "")
+      const categories = result.data.discountCategories.length
+        ? result.data.discountCategories
+        : discountCategoryOptions.filter((category) => category.cycleId === cycleId && category.isActive)
+      setDiscountCategories(categories)
+      setDiscountCategoryId((current) => categories.some((category) => category.id === current) ? current : "")
       setFinancialOptionsState("ready")
       })
     }, 0)
     return () => { cancelled = true; window.clearTimeout(request) }
-  }, [activatedOn, cycleId, educationLevelId, newStudentMode])
+  }, [activatedOn, cycleId, discountCategoryOptions, educationLevelId, newStudentMode])
 
   useEffect(() => {
     const update = window.setTimeout(() => {
@@ -276,6 +281,7 @@ export function NewEnrollmentSheet({
         economicStartOn: economicStartForRpc,
         initialPeriodAmount: needsInitialAmount && initialPeriodChargeSelected ? initialPeriodAmount || null : null,
         initialPeriodDueDate: needsInitialAmount && initialPeriodChargeSelected ? initialPeriodDueDate || null : null,
+        discountCategoryId: discountCategoryId || null,
         enrollmentFeeMode: enrollmentFeeCoverage === "uncovered" ? enrollmentFeeMode : null,
         enrollmentFeeAmount: enrollmentFeeCoverage === "uncovered" ? enrollmentFeeAmount || null : null,
         reason,
@@ -449,15 +455,15 @@ export function NewEnrollmentSheet({
             {step === "financial" && (
               <section className="space-y-5">
                 <div><h2 className="text-lg font-semibold">Configuración financiera</h2><p className="mt-1 text-sm text-muted-foreground">Se aplicará el plan predeterminado de 12 pagos configurado para el ciclo y nivel.</p></div>
-                {newStudentMode && <section className="space-y-3 border-y border-border py-4"><div><h3 className="text-sm font-semibold">Beneficio de colegiatura</h3><p className="mt-1 text-sm text-muted-foreground">Se aplicará sobre la colegiatura base vigente para la fecha de ingreso.</p></div>{financialOptionsState === "loading" && <p className="text-sm text-muted-foreground">Consultando colegiatura y beneficios...</p>}{financialOptionsState === "error" && <p className="text-sm text-destructive">No pudimos consultar la colegiatura base y los beneficios.</p>}{financialOptionsState === "ready" && <Field label="Categoría"><select value={discountCategoryId} onChange={(event) => setDiscountCategoryId(event.target.value)} className={selectClass}><option value="">Sin beneficio</option>{discountCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></Field>}{baseAmount !== null && <dl className="grid gap-2 rounded-lg bg-muted/30 px-3 py-3 text-sm"><Summary label="Colegiatura base" value={formatCurrency(baseAmount)} /><Summary label="Beneficio" value={selectedDiscountCategory && selectedDiscountVersion ? `-${formatTuitionDiscountValue(selectedDiscountVersion.value, selectedDiscountCategory.discountType)} · ${tuitionDiscountTypeLabel(selectedDiscountCategory.discountType)}` : "Sin beneficio"} /><Summary label="Colegiatura individual" value={formatCurrency(individualAmount ?? baseAmount)} /></dl>}</section>}
+                <section className="space-y-3 border-y border-border py-4"><div><h3 className="text-sm font-semibold">Beneficio de colegiatura</h3><p className="mt-1 text-sm text-muted-foreground">Se aplicará sobre la colegiatura base vigente para la fecha de ingreso.</p></div>{financialOptionsState === "loading" && <p className="text-sm text-muted-foreground">Consultando colegiatura y beneficios...</p>}{financialOptionsState === "error" && <p className="text-sm text-destructive">No pudimos consultar la colegiatura base y los beneficios.</p>}{financialOptionsState === "ready" && <Field label="Categoría"><select value={discountCategoryId} onChange={(event) => setDiscountCategoryId(event.target.value)} className={selectClass}><option value="">Sin beneficio</option>{discountCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></Field>}{baseAmount !== null && <dl className="grid gap-2 rounded-lg bg-muted/30 px-3 py-3 text-sm"><Summary label="Colegiatura base" value={formatCurrency(baseAmount)} /><Summary label="Beneficio" value={selectedDiscountCategory && selectedDiscountVersion ? `-${formatTuitionDiscountValue(selectedDiscountVersion.value, selectedDiscountCategory.discountType)} · ${tuitionDiscountTypeLabel(selectedDiscountCategory.discountType)}` : "Sin beneficio"} /><Summary label="Colegiatura individual" value={formatCurrency(individualAmount ?? baseAmount)} /></dl>}</section>
                 {needsInitialAmount && <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4"><div><p className="text-sm font-medium">Primer periodo / ingreso inicial</p><p className="mt-1 text-sm text-muted-foreground">{showInitialPeriodDecision ? "Define si este segmento inicial genera un cobro." : "Captura el importe acordado para el ingreso dentro del periodo."}</p></div>{showInitialPeriodDecision && <div className="grid gap-2"><Choice label="No cobrar este periodo" checked={initialPeriodDecision === "WAIVE"} onChange={() => { setInitialPeriodDecision("WAIVE"); setInitialPeriodAmount(""); setInitialPeriodDueDate("") }} /><Choice label="Cobrar este periodo" checked={initialPeriodDecision === "CHARGE"} onChange={() => setInitialPeriodDecision("CHARGE")} /></div>}{initialPeriodChargeSelected && <div className="grid gap-4 sm:grid-cols-2"><Field label="Importe del primer periodo"><Input inputMode="decimal" value={initialPeriodAmount} onChange={(event) => setInitialPeriodAmount(event.target.value)} placeholder="0.00" /></Field>{showInitialPeriodDecision && <div><Field label="Fecha de vencimiento"><Input type="date" value={initialPeriodDueDate} onChange={(event) => setInitialPeriodDueDate(event.target.value)} /></Field><p className="mt-1 text-xs text-muted-foreground">Define cuándo este cargo se considerará vencido.</p></div>}</div>}</div>}
-                <div className="space-y-3 border-y border-border py-4"><div><h3 className="text-sm font-semibold">Inscripción</h3>{(enrollmentFeeCoverage === "idle" || enrollmentFeeCoverage === "loading") && <p className="mt-1 text-sm text-muted-foreground">Consultando cobertura de inscripción...</p>}{enrollmentFeeCoverage === "covered" && <p className="mt-1 text-sm text-emerald-700">Inscripción cubierta para este ciclo.</p>}{enrollmentFeeCoverage === "uncovered" && <p className="mt-1 text-sm text-muted-foreground">Debe generar inscripción.</p>}{enrollmentFeeCoverage === "error" && <div className="mt-1 flex items-center justify-between gap-3"><p className="text-sm text-destructive">No pudimos consultar la cobertura de inscripción.</p><Button type="button" variant="outline" size="sm" onClick={() => void loadEnrollmentFeeCoverage()}>Reintentar</Button></div>}</div>{enrollmentFeeCoverage === "uncovered" && <><div className="grid gap-2"><Choice label="Completa" checked={enrollmentFeeMode === "FULL"} onChange={() => setEnrollmentFeeMode("FULL")} /><Choice label="Proporcional" checked={enrollmentFeeMode === "PROPORTIONAL"} onChange={() => setEnrollmentFeeMode("PROPORTIONAL")} /></div>{enrollmentFeeMode === "PROPORTIONAL" && <Field label="Importe de inscripción"><Input inputMode="decimal" value={enrollmentFeeAmount} onChange={(event) => setEnrollmentFeeAmount(event.target.value)} placeholder="0.00" /></Field>}</>}</div>
+                <div className="space-y-3 border-y border-border py-4"><div><h3 className="text-sm font-semibold">Inscripción</h3>{(enrollmentFeeCoverage === "idle" || enrollmentFeeCoverage === "loading") && <p className="mt-1 text-sm text-muted-foreground">Consultando cobertura de inscripción...</p>}{enrollmentFeeCoverage === "covered" && <p className="mt-1 text-sm text-emerald-700">Inscripción cubierta para este ciclo.</p>}{enrollmentFeeCoverage === "uncovered" && <p className="mt-1 text-sm text-muted-foreground">Define la modalidad de inscripción.</p>}{enrollmentFeeCoverage === "error" && <div className="mt-1 flex items-center justify-between gap-3"><p className="text-sm text-destructive">No pudimos consultar la cobertura de inscripción.</p><Button type="button" variant="outline" size="sm" onClick={() => void loadEnrollmentFeeCoverage()}>Reintentar</Button></div>}</div>{enrollmentFeeCoverage === "uncovered" && <><div className="grid gap-2"><Choice label="Completa" checked={enrollmentFeeMode === "FULL"} onChange={() => setEnrollmentFeeMode("FULL")} /><Choice label="Proporcional" checked={enrollmentFeeMode === "PROPORTIONAL"} onChange={() => setEnrollmentFeeMode("PROPORTIONAL")} /><Choice label="No paga inscripción" checked={enrollmentFeeMode === "NO_FEE"} onChange={() => setEnrollmentFeeMode("NO_FEE")} /></div>{enrollmentFeeMode === "PROPORTIONAL" && <Field label="Importe de inscripción"><Input inputMode="decimal" value={enrollmentFeeAmount} onChange={(event) => setEnrollmentFeeAmount(event.target.value)} placeholder="0.00" /></Field>}</>}</div>
                 <Field label="Motivo"><Textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ej. Alta al ciclo 2026-2027" rows={3} /></Field>
               </section>
             )}
 
             {step === "review" && (student || newStudentMode) && (
-              <section className="space-y-5"><div><h2 className="text-lg font-semibold">Resumen de matrícula</h2><p className="mt-1 text-sm text-muted-foreground">Revisa la información antes de activar la matrícula.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={newStudentMode ? studentFullName : student?.fullName ?? ""} /><Summary label="Ciclo" value={selectedCycle?.name ?? ""} /><Summary label="Grado" value={`${selectedLevel?.name ?? ""}${selectedLevel ? " " : ""}${selectedGrade?.name ?? ""}${groupLabel ? ` ${groupLabel}` : ""}`} /><Summary label="Clasificación" value={selectedClassification?.name ?? ""} /><Summary label="Fecha efectiva de ingreso" value={formatDate(activatedOn)} />{newStudentMode && <><Summary label="Beneficio" value={selectedDiscountCategory?.name ?? "Sin beneficio"} /><Summary label="Colegiatura base" value={baseAmount === null ? "Sin dato" : formatCurrency(baseAmount)} /><Summary label="Colegiatura individual" value={individualAmount === null ? "Sin dato" : formatCurrency(individualAmount)} /></>}<Summary label="Plan" value="12 pagos predeterminado" /><Summary label="Colegiatura inicial" value={!needsInitialAmount ? "Inicio de periodo · colegiatura vigente" : !initialPeriodChargeSelected ? `Primera colegiatura desde ${formatDate(firstOrdinaryPeriodStart ?? "")}` : showInitialPeriodDecision ? `Periodo previo · $${initialPeriodAmount || "0.00"} acordado · vence ${formatDate(initialPeriodDueDate)}` : `$${initialPeriodAmount || "0.00"} acordado`} /><Summary label="Inscripción" value={enrollmentFeeCoverage === "covered" ? "Inscripción cubierta para este ciclo" : enrollmentFeeMode === "PROPORTIONAL" ? `Inscripción proporcional · $${enrollmentFeeAmount || "0.00"}` : "Inscripción completa"} /></dl></section>
+              <section className="space-y-5"><div><h2 className="text-lg font-semibold">Resumen de matrícula</h2><p className="mt-1 text-sm text-muted-foreground">Revisa la información antes de activar la matrícula.</p></div><dl className="divide-y divide-border border-y border-border"><Summary label="Alumno" value={newStudentMode ? studentFullName : student?.fullName ?? ""} /><Summary label="Ciclo" value={selectedCycle?.name ?? ""} /><Summary label="Grado" value={`${selectedLevel?.name ?? ""}${selectedLevel ? " " : ""}${selectedGrade?.name ?? ""}${groupLabel ? ` ${groupLabel}` : ""}`} /><Summary label="Clasificación" value={selectedClassification?.name ?? ""} /><Summary label="Fecha efectiva de ingreso" value={formatDate(activatedOn)} /><Summary label="Beneficio" value={selectedDiscountCategory?.name ?? "Sin beneficio"} /><Summary label="Colegiatura base" value={baseAmount === null ? "Sin dato" : formatCurrency(baseAmount)} /><Summary label="Colegiatura individual" value={individualAmount === null ? "Sin dato" : formatCurrency(individualAmount)} /><Summary label="Plan" value="12 pagos predeterminado" /><Summary label="Colegiatura inicial" value={!needsInitialAmount ? "Inicio de periodo · colegiatura vigente" : !initialPeriodChargeSelected ? `Primera colegiatura desde ${formatDate(firstOrdinaryPeriodStart ?? "")}` : showInitialPeriodDecision ? `Periodo previo · $${initialPeriodAmount || "0.00"} acordado · vence ${formatDate(initialPeriodDueDate)}` : `$${initialPeriodAmount || "0.00"} acordado`} /><Summary label="Inscripción" value={enrollmentFeeCoverage === "covered" ? "Inscripción cubierta para este ciclo" : enrollmentFeeMode === "PROPORTIONAL" ? `Inscripción proporcional · $${enrollmentFeeAmount || "0.00"}` : "Inscripción completa"} /></dl></section>
             )}
 
             {step === "payment" && createdStudentId && <section className="space-y-5"><div><h2 className="text-lg font-semibold">Pago pendiente</h2><p className="mt-1 text-sm text-muted-foreground">La matrícula quedó activa y tiene cargos pendientes.</p></div><div className="rounded-lg border border-border bg-muted/30 p-4 text-sm">Puedes registrar el pago ahora o hacerlo después desde la cuenta del alumno.</div><div className="flex flex-wrap gap-2"><Button type="button" onClick={() => setPaymentOpen(true)}>Registrar pago</Button><Button type="button" variant="outline" onClick={() => setStep("success")}>Registrar después</Button></div></section>}

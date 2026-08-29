@@ -22,7 +22,8 @@ export type CreateEnrollmentInput = {
   economicStartOn: string
   initialPeriodAmount: string | null
   initialPeriodDueDate: string | null
-  enrollmentFeeMode: "FULL" | "PROPORTIONAL" | null
+  discountCategoryId: string | null
+  enrollmentFeeMode: "FULL" | "PROPORTIONAL" | "NO_FEE" | null
   enrollmentFeeAmount: string | null
   reason: string
 }
@@ -51,7 +52,7 @@ export type CreateNewStudentEnrollmentInput = {
   economicStartOn: string
   initialPeriodAmount: string | null
   initialPeriodDueDate: string | null
-  enrollmentFeeMode: "FULL" | "PROPORTIONAL" | null
+  enrollmentFeeMode: "FULL" | "PROPORTIONAL" | "NO_FEE" | null
   enrollmentFeeAmount: string | null
   reason: string
 }
@@ -138,7 +139,9 @@ type BulkEnrollmentItem = {
   economicStartOn: string
   initialPeriodAmount: string | null
   initialPeriodDueDate: string | null
-  enrollmentFeeMode: "FULL" | null
+  discountCategoryId: string | null
+  enrollmentFeeMode: "FULL" | "PROPORTIONAL" | "NO_FEE" | null
+  enrollmentFeeAmount: string | null
   reason: string
 }
 
@@ -171,7 +174,8 @@ export type ResolvePreregistrationInput = {
   economicStartOn: string
   initialPeriodAmount: string | null
   initialPeriodDueDate: string | null
-  enrollmentFeeMode: "FULL" | "PROPORTIONAL" | null
+  discountCategoryId: string | null
+  enrollmentFeeMode: "FULL" | "PROPORTIONAL" | "NO_FEE" | null
   enrollmentFeeAmount: string | null
   reason: string
 }
@@ -288,6 +292,7 @@ export async function createEnrollment(
         ? cleanText(input.enrollmentFeeAmount)
         : null,
       p_reason: input.reason.trim(),
+      p_discount_category_id: cleanText(input.discountCategoryId),
     }
   )
 
@@ -327,6 +332,7 @@ export async function createNewStudentEnrollment(
     economicStartOn: input.economicStartOn,
     initialPeriodAmount: input.initialPeriodAmount,
     initialPeriodDueDate: input.initialPeriodDueDate,
+    discountCategoryId: input.discountCategoryId,
     enrollmentFeeMode: input.enrollmentFeeMode,
     enrollmentFeeAmount: input.enrollmentFeeAmount,
     reason: input.reason,
@@ -402,7 +408,7 @@ export async function resolvePreregistrationToEnrollment(
   if (input.initialPeriodAmount && (!Number.isFinite(Number(input.initialPeriodAmount)) || Number(input.initialPeriodAmount) < 0)) {
     return { ok: false, message: "El importe del primer cobro debe ser un monto válido." }
   }
-  if (input.enrollmentFeeMode === "PROPORTIONAL" && (!input.enrollmentFeeAmount?.trim() || !Number.isFinite(Number(input.enrollmentFeeAmount)) || Number(input.enrollmentFeeAmount) < 0)) {
+  if (input.enrollmentFeeMode === "PROPORTIONAL" && (!input.enrollmentFeeAmount?.trim() || !Number.isFinite(Number(input.enrollmentFeeAmount)) || Number(input.enrollmentFeeAmount) <= 0)) {
     return { ok: false, message: "El importe de inscripción proporcional debe ser un monto válido." }
   }
   if (!input.reason.trim()) return { ok: false, message: "Indica el motivo de la matrícula." }
@@ -420,6 +426,7 @@ export async function resolvePreregistrationToEnrollment(
     p_enrollment_fee_mode: input.enrollmentFeeMode,
     p_enrollment_fee_amount: input.enrollmentFeeMode === "PROPORTIONAL" ? cleanText(input.enrollmentFeeAmount) : null,
     p_reason: input.reason.trim(),
+    p_discount_category_id: cleanText(input.discountCategoryId),
   })
 
   if (error || typeof enrollmentId !== "string" || !enrollmentId) {
@@ -1310,6 +1317,9 @@ export async function bulkCreateAndActivateEnrollments(input: {
     if (item.initialPeriodAmount && (!Number.isFinite(Number(item.initialPeriodAmount)) || Number(item.initialPeriodAmount) < 0)) {
       return { ok: false, message: "El importe del primer periodo debe ser válido." }
     }
+    if (item.enrollmentFeeMode === "PROPORTIONAL" && (!item.enrollmentFeeAmount?.trim() || !Number.isFinite(Number(item.enrollmentFeeAmount)) || Number(item.enrollmentFeeAmount) <= 0)) {
+      return { ok: false, message: "El importe de inscripción proporcional debe ser mayor que cero." }
+    }
   }
 
   const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
@@ -1326,7 +1336,8 @@ export async function bulkCreateAndActivateEnrollments(input: {
       initial_period_amount: cleanText(item.initialPeriodAmount),
       initial_period_due_date: cleanText(item.initialPeriodDueDate),
       enrollment_fee_mode: item.enrollmentFeeMode,
-      enrollment_fee_amount: null,
+      enrollment_fee_amount: item.enrollmentFeeMode === "PROPORTIONAL" ? cleanText(item.enrollmentFeeAmount) : null,
+      discount_category_id: cleanText(item.discountCategoryId),
       reason: item.reason.trim(),
     })),
   })
@@ -1484,8 +1495,8 @@ function validate(input: CreateEnrollmentInput) {
 
   if (input.enrollmentFeeMode === "PROPORTIONAL") {
     const amount = Number(input.enrollmentFeeAmount)
-    if (!input.enrollmentFeeAmount?.trim() || !Number.isFinite(amount) || amount < 0) {
-      return "El importe de inscripción proporcional debe ser un monto válido."
+    if (!input.enrollmentFeeAmount?.trim() || !Number.isFinite(amount) || amount <= 0) {
+      return "El importe de inscripción proporcional debe ser mayor que cero."
     }
   }
 

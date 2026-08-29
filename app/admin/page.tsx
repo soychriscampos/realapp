@@ -8,6 +8,7 @@ import { StudentQuickSearch } from "@/components/admin/student-quick-search"
 import { getAdminHomeData } from "@/lib/admin/admin-home"
 import { getEnrollmentFinancialCoverage } from "@/lib/admin/enrollments"
 import { formatCurrency } from "@/lib/admin/student-account"
+import { getTuitionDiscountCategories } from "@/lib/admin/discount-categories"
 import { getStudentCatalogs } from "@/lib/admin/students"
 import { requireRole } from "@/lib/auth/require-role"
 
@@ -18,19 +19,20 @@ export default async function AdminPage() {
   if (catalogsError || !catalogs?.operationalCycle) return <AdminLoadError />
 
   const cycle = catalogs.operationalCycle
-  const [groupsResult, financialCoverageResult, home] = await Promise.all([
+  const [groupsResult, financialCoverageResult, discountCategoriesResult, home] = await Promise.all([
     supabase
       .from("groups")
       .select("id, name, code, cycle_id, grade_level_id")
       .eq("is_active", true)
       .order("name"),
     getEnrollmentFinancialCoverage(supabase),
+    getTuitionDiscountCategories(supabase, cycle.id),
     getAdminHomeData(supabase, userId, roles.includes("MASTER"), {
       id: cycle.id,
     }),
   ])
 
-  if (groupsResult.error || financialCoverageResult.error) return <AdminLoadError />
+  if (groupsResult.error || financialCoverageResult.error || discountCategoriesResult.error) return <AdminLoadError />
 
   const isMaster = roles.includes("MASTER")
 
@@ -51,6 +53,7 @@ export default async function AdminPage() {
             groups={groupsResult.data ?? []}
             classifications={catalogs.classifications}
             financialCoverage={financialCoverageResult.data}
+            discountCategories={discountCategoriesResult.data}
             triggerLabel="Registrar alumno"
             triggerClassName="min-w-44"
           />

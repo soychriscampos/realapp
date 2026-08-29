@@ -123,6 +123,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
             groups={groupsResult.data ?? []}
             classifications={catalogs.classifications}
             financialCoverage={financialCoverageResult.data}
+            discountCategories={discountCategoriesResult.data}
           />
         </div>}
       </header>
@@ -164,6 +165,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
             groups={groupsResult.data ?? []}
             classifications={catalogs.classifications}
             financialCoverage={financialCoverageResult.data}
+            discountCategories={discountCategoriesResult.data}
           />
         </div>
       )}
@@ -180,6 +182,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
             groups={groupsResult.data ?? []}
             classifications={catalogs.classifications}
             financialCoverage={financialCoverageResult.data}
+            discountCategories={discountCategoriesResult.data}
           />
         </div>
       )}
