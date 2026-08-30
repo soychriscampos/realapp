@@ -129,6 +129,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
             classifications={catalogs.classifications}
             financialCoverage={financialCoverageResult.data}
             discountCategories={discountCategoriesResult.data}
+            triggerClassName="w-full sm:w-auto"
           />
         </div>}
       </header>

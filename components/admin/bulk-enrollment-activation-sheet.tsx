@@ -2,7 +2,7 @@
 
 import { Dialog } from "@base-ui/react/dialog"
 import { Toast } from "@base-ui/react/toast"
-import { CheckCircle2, ChevronLeft, LoaderCircle, Users, X } from "lucide-react"
+import { CheckCircle2, ChevronLeft, LoaderCircle, Search, Users, X } from "lucide-react"
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 
@@ -66,6 +66,7 @@ export function BulkEnrollmentActivationSheet({
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<Step>("candidates")
   const [configurations, setConfigurations] = useState<Record<string, CandidateConfiguration>>({})
+  const [query, setQuery] = useState("")
   const [activatedOn, setActivatedOn] = useState(cycle.starts_on)
   const [classesStartOn, setClassesStartOn] = useState(cycle.starts_on)
   const [economicStartOn, setEconomicStartOn] = useState(cycle.starts_on)
@@ -81,6 +82,7 @@ export function BulkEnrollmentActivationSheet({
   const toastManager = Toast.useToastManager()
 
   const selectedCandidates = candidates.filter((candidate) => configurations[candidate.studentId]?.selected)
+  const filteredCandidates = candidates.filter((candidate) => normalizeCandidateSearch(candidate).includes(query.trim().toLocaleLowerCase("es-MX")))
   const hasPreOrdinaryPeriod = selectedCandidates.some((candidate) => {
     const configuration = configurations[candidate.studentId]
     return getCandidateInitialPeriodState(configuration, grades, financialCoverage, cycle.id, economicStartOn).isBeforeFirstOrdinaryPeriod
@@ -93,6 +95,7 @@ export function BulkEnrollmentActivationSheet({
 
   function reset() {
     setStep("candidates")
+    setQuery("")
     setConfigurations(initialConfigurations(candidates, levels, grades, groups, classifications, cycle.id))
     setActivatedOn(cycle.starts_on)
     setClassesStartOn(cycle.starts_on)
@@ -246,10 +249,11 @@ export function BulkEnrollmentActivationSheet({
                 <div>
                   <h2 className="text-lg font-semibold">Alumnos candidatos</h2>
                   <p className="mt-1 text-sm text-muted-foreground">Selecciona alumnos con matrícula en {previousCycleName} que aún no están inscritos en {cycle.name}.</p>
+                  <div className="relative mt-4"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar alumno..." aria-label="Buscar alumno en la lista" className="h-11 bg-white pl-10" /></div>
                 </div>
-                {candidates.length ? (
+                {candidates.length ? filteredCandidates.length ? (
                   <div className="overflow-hidden rounded-xl border border-border bg-white">
-                    {candidates.map((candidate) => {
+                    {filteredCandidates.map((candidate) => {
                       const configuration = configurations[candidate.studentId]
                       return <label key={candidate.studentId} className="flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-muted/50">
                         <input type="checkbox" checked={configuration?.selected ?? false} onChange={(event) => updateConfiguration(candidate.studentId, { selected: event.target.checked })} className="mt-1 size-4 accent-primary" />
@@ -257,7 +261,7 @@ export function BulkEnrollmentActivationSheet({
                       </label>
                     })}
                   </div>
-                ) : loadError ? <CandidateLoadError /> : <EmptyCandidates />}
+                ) : <p className="border-y border-border py-8 text-center text-sm text-muted-foreground">No encontramos alumnos.</p> : loadError ? <CandidateLoadError /> : <EmptyCandidates />}
               </section>
             )}
 
@@ -410,6 +414,10 @@ function gradeLabel(grade: Grade, levels: Level[]) {
 
 function statusLabel(status: string) {
   return { ACTIVA: "Activa", BAJA: "Baja", PREINSCRITA: "Preinscrita", PENDIENTE: "Pendiente", NO_CONTINUA: "No continúa" }[status] ?? status
+}
+
+function normalizeCandidateSearch(candidate: BulkEnrollmentCandidate) {
+  return `${candidate.fullName} ${candidate.studentCode ?? ""}`.toLocaleLowerCase("es-MX")
 }
 
 function formatDate(value: string) {

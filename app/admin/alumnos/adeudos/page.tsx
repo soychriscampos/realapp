@@ -1,6 +1,7 @@
 import Link from "next/link"
 
 import { OverdueStudentsTable, type OverdueStudent } from "@/components/admin/overdue-students-table"
+import { OverdueCycleSelect } from "@/components/admin/overdue-cycle-select"
 import { StudentModuleNav } from "@/components/admin/student-module-nav"
 import { formatCurrency } from "@/lib/admin/student-account"
 import { getStudentCatalogs } from "@/lib/admin/students"
@@ -57,22 +58,7 @@ export default async function OverdueStudentsPage({ searchParams }: OverduePageP
           <p className="mt-1 text-sm text-muted-foreground">Consulta global de obligaciones vencidas por alumno.</p>
         </div>
 
-        <form action="/admin/alumnos/adeudos" className="flex flex-wrap items-end gap-3">
-          <label className="grid gap-1 text-sm font-medium">
-            <span className="text-xs text-muted-foreground">Vista</span>
-            <select
-              name="cycle"
-              defaultValue={selectedCycle?.id ?? ""}
-              className="h-10 min-w-52 rounded-lg border border-input bg-white px-2.5 text-sm outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/50"
-            >
-              <option value="">Todo</option>
-              {catalogs.cycles.map((cycle) => <option key={cycle.id} value={cycle.id}>Por ciclo: {cycle.name}</option>)}
-            </select>
-          </label>
-          <button className="h-10 rounded-lg border border-border bg-white px-3 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-            Aplicar
-          </button>
-        </form>
+        <OverdueCycleSelect cycles={catalogs.cycles} value={selectedCycle?.id ?? ""} />
       </header>
 
       <section aria-label="Resumen de deuda vencida" className="grid border-y border-border sm:grid-cols-3">

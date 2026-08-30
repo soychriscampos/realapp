@@ -115,7 +115,7 @@ export function AdminShell({ children, roleLabel, userName, canManageUsers = fal
         <header className="sticky top-0 z-30 border-b border-border bg-white/95 px-4 backdrop-blur">
           <div className="flex min-h-14 items-center justify-between gap-3 pt-[env(safe-area-inset-top)]">
             <div>
-              <p className="text-sm font-semibold">REAL</p>
+              <Image src="/logo-real.png" alt="REAL" width={32} height={32} className="size-7 object-contain" priority />
             </div>
             <UserMenu roleLabel={roleLabel} userName={userName} />
           </div>

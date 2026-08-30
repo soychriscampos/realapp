@@ -1,6 +1,7 @@
 "use client"
 
-import { Filter, LoaderCircle, Search } from "lucide-react"
+import { Dialog } from "@base-ui/react/dialog"
+import { Filter, LoaderCircle, Search, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
@@ -29,6 +30,7 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
   const [query, setQuery] = useState(values.query ?? "")
   const queryEditedRef = useRef(false)
   const [isSearching, setIsSearching] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -85,45 +87,69 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
         />
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <FilterSelect
-          label="Nivel"
-          name="level"
-          value={levelId}
-          options={levels}
-          onChange={(nextLevelId) => {
-            setLevelId(nextLevelId)
-            setGradeId("")
-            setGroupId("")
-          }}
+      <div className="hidden flex-wrap items-end gap-3 md:flex">
+        <FilterFields
+          levelId={levelId}
+          gradeId={gradeId}
+          groupId={groupId}
+          situationId={situationId}
+          classificationId={classificationId}
+          levels={levels}
+          availableGrades={availableGrades}
+          availableGroups={availableGroups}
+          situations={situations}
+          classifications={classifications}
+          setLevelId={(next) => { setLevelId(next); setGradeId(""); setGroupId("") }}
+          setGradeId={(next) => { setGradeId(next); setGroupId("") }}
+          setGroupId={setGroupId}
+          setSituationId={setSituationId}
+          setClassificationId={setClassificationId}
         />
-        <FilterSelect
-          label="Grado"
-          name="grade"
-          value={gradeId}
-          disabled={!levelId}
-          options={availableGrades.map((grade) => ({
-            ...grade,
-            name: levelId ? grade.name : `${levels.find((level) => level.id === grade.education_level_id)?.name ?? "Nivel"} · ${grade.name}`,
-          }))}
-          onChange={(nextGradeId) => {
-            setGradeId(nextGradeId)
-            setGroupId("")
-          }}
-        />
-        <FilterSelect
-          label="Grupo"
-          name="group"
-          value={groupId}
-          disabled={!gradeId}
-          options={availableGroups.map((group) => ({ ...group, name: getEnrollmentGroupLabel(group) }))}
-          onChange={setGroupId}
-        />
-        <FilterSelect label="Matrícula" name="situation" value={situationId} options={situations} emptyLabel="Todas" onChange={setSituationId} />
-        <FilterSelect label="Clasificación" name="classification" value={classificationId} options={classifications} onChange={setClassificationId} />
         <Button type="submit" variant="outline" className="h-10 bg-white"><Filter /> Aplicar</Button>
       </div>
     </form>
+
+    <div className="md:hidden">
+      <Dialog.Root open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <Dialog.Trigger render={<Button type="button" variant="outline" className="h-10 w-full bg-white"><Filter /> Filtros</Button>} />
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/20" />
+          <Dialog.Popup className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col rounded-t-2xl border-t border-border bg-white shadow-xl outline-none">
+            <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-border px-4">
+              <Dialog.Title className="text-base font-semibold">Filtros</Dialog.Title>
+              <Dialog.Close aria-label="Cerrar filtros" className="flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"><X className="size-4" /></Dialog.Close>
+            </header>
+            <form action="/admin/matricula" className="min-h-0 flex-1 overflow-y-auto" onSubmit={() => { setIsSearching(true); setFiltersOpen(false) }}>
+              <input type="hidden" name="cycle" value={values.cycle ?? ""} />
+              <input type="hidden" name="query" value={query} />
+              <input type="hidden" name="applied" value="1" />
+              <div className="grid gap-4 px-4 py-5">
+                <FilterFields
+                  levelId={levelId}
+                  gradeId={gradeId}
+                  groupId={groupId}
+                  situationId={situationId}
+                  classificationId={classificationId}
+                  levels={levels}
+                  availableGrades={availableGrades}
+                  availableGroups={availableGroups}
+                  situations={situations}
+                  classifications={classifications}
+                  setLevelId={(next) => { setLevelId(next); setGradeId(""); setGroupId("") }}
+                  setGradeId={(next) => { setGradeId(next); setGroupId("") }}
+                  setGroupId={setGroupId}
+                  setSituationId={setSituationId}
+                  setClassificationId={setClassificationId}
+                />
+              </div>
+              <footer className="sticky bottom-0 border-t border-border bg-white px-4 py-3 pb-[calc(.75rem+env(safe-area-inset-bottom))]">
+                <Button type="submit" className="h-11 w-full">Aplicar filtros</Button>
+              </footer>
+            </form>
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </div>
     {!applied && (
       <p className="flex items-center justify-center gap-2 border-y border-border py-8 text-center text-sm text-muted-foreground">
         {isSearching ? <><LoaderCircle className="size-4 animate-spin" /> Buscando...</> : "Busca o aplica filtros para ver alumnos."}
@@ -133,9 +159,49 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
   )
 }
 
+type FilterFieldsProps = {
+  levelId: string
+  gradeId: string
+  groupId: string
+  situationId: string
+  classificationId: string
+  levels: Option[]
+  availableGrades: Array<Option & { education_level_id: string }>
+  availableGroups: Array<Option & { code: string; grade_level_id: string; cycle_id: string }>
+  situations: Option[]
+  classifications: Option[]
+  setLevelId: (value: string) => void
+  setGradeId: (value: string) => void
+  setGroupId: (value: string) => void
+  setSituationId: (value: string) => void
+  setClassificationId: (value: string) => void
+}
+
+function FilterFields({ levelId, gradeId, groupId, situationId, classificationId, levels, availableGrades, availableGroups, situations, classifications, setLevelId, setGradeId, setGroupId, setSituationId, setClassificationId }: FilterFieldsProps) {
+  return (
+    <>
+      <FilterSelect label="Nivel" name="level" value={levelId} options={levels} onChange={setLevelId} />
+      <FilterSelect
+        label="Grado"
+        name="grade"
+        value={gradeId}
+        disabled={!levelId}
+        options={availableGrades.map((grade) => ({
+          ...grade,
+          name: levelId ? grade.name : `${levels.find((level) => level.id === grade.education_level_id)?.name ?? "Nivel"} · ${grade.name}`,
+        }))}
+        onChange={setGradeId}
+      />
+      <FilterSelect label="Grupo" name="group" value={groupId} disabled={!gradeId} options={availableGroups.map((group) => ({ ...group, name: getEnrollmentGroupLabel(group) }))} onChange={setGroupId} />
+      <FilterSelect label="Matrícula" name="situation" value={situationId} options={situations} emptyLabel="Todas" onChange={setSituationId} />
+      <FilterSelect label="Clasificación" name="classification" value={classificationId} options={classifications} onChange={setClassificationId} />
+    </>
+  )
+}
+
 function FilterSelect({ label, name, value, options, onChange, emptyLabel = "Todos", disabled = false }: { label: string; name: string; value?: string; options: Option[]; onChange?: (value: string) => void; emptyLabel?: string; disabled?: boolean }) {
   return (
-    <label className="w-36">
+    <label className="w-full md:w-36">
       <span className="mb-1 block text-xs text-muted-foreground">{label}</span>
       <select
         name={name}
