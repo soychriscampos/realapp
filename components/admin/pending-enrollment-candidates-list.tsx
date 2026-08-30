@@ -47,7 +47,6 @@ function CandidateMobileRow({ candidate }: { candidate: BulkEnrollmentCandidate 
     <Link href={`/admin/alumnos/${candidate.studentId}`} className="flex min-h-[76px] items-center justify-between gap-4 border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
       <span className="min-w-0">
         <span className="block truncate text-sm font-medium">{candidate.fullName}</span>
-        {candidate.studentCode && <span className="mt-0.5 block text-xs text-muted-foreground">{candidate.studentCode}</span>}
         <span className="mt-1 block truncate text-sm text-muted-foreground">Ciclo anterior · {candidate.previousGrade.educationLevelName} · {candidate.previousGrade.name}</span>
       </span>
       <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
@@ -61,7 +60,6 @@ function CandidateDesktopRow({ candidate }: { candidate: BulkEnrollmentCandidate
       <td className="px-4 py-3">
         <Link href={`/admin/alumnos/${candidate.studentId}`} className="block focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
           <span className="font-medium">{candidate.fullName}</span>
-          {candidate.studentCode && <span className="mt-0.5 block text-xs text-muted-foreground">{candidate.studentCode}</span>}
         </Link>
       </td>
       <td className="px-4 py-3 text-muted-foreground">{candidate.previousGrade.educationLevelName} · {candidate.previousGrade.name}</td>

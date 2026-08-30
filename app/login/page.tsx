@@ -4,10 +4,10 @@ import { createClient } from '@/lib/supabase/server'
 import { getHomeRoute } from '@/lib/auth/home-route'
 import { login } from './actions'
 
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PasswordField } from './password-field'
+import { LoginSubmit } from './login-submit'
 
 type LoginPageProps = {
   searchParams: Promise<{
@@ -93,9 +93,7 @@ export default async function LoginPage({
             </p>
           )}
 
-          <Button type="submit" className="h-12 w-full">
-            Iniciar sesión
-          </Button>
+          <LoginSubmit />
 
           <p className="text-center text-sm text-muted-foreground">
             ¿Olvidaste tu contraseña?

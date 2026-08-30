@@ -102,7 +102,7 @@ function EnrollmentDesktopRow({ enrollment, selected, onToggle }: { enrollment: 
       tabIndex={0}
     >
       <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>{(enrollment.status === "ACTIVA" || enrollment.status === "FINALIZADA") && <input aria-label={`Seleccionar a ${enrollment.student.fullName}`} type="checkbox" checked={selected} onChange={onToggle} className="size-4" />}</td>
-      <td className="px-4 py-3"><span className="font-medium">{enrollment.student.fullName}</span>{enrollment.student.studentCode && <span className="mt-0.5 block text-xs text-muted-foreground">{enrollment.student.studentCode}</span>}</td>
+      <td className="px-4 py-3"><span className="font-medium">{enrollment.student.fullName}</span></td>
       <td className="px-4 py-3 text-muted-foreground">{enrollment.educationLevel.name} · {enrollment.gradeLevel.name}</td>
       <td className="px-4 py-3 text-muted-foreground">{enrollment.group ? getEnrollmentGroupLabel(enrollment.group) : "Sin grupo"}</td>
       <td className="px-4 py-3">{formatEnrollmentStatus(enrollment.status)}</td>

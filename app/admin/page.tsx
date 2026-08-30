@@ -1,7 +1,6 @@
 import { ChevronRight } from "lucide-react"
 import Link from "next/link"
 
-import { QuickAction } from "@/components/admin/admin-shell"
 import { AdminHomeRecentPayments } from "@/components/admin/admin-home-recent-payments"
 import { NewEnrollmentSheet } from "@/components/admin/new-enrollment-sheet"
 import { StudentQuickSearch } from "@/components/admin/student-quick-search"
@@ -44,7 +43,6 @@ export default async function AdminPage() {
           <p className="text-sm text-muted-foreground">{cycle.name}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <QuickAction icon="payment" label="Registrar pago" searchTarget="register-payment" />
           <NewEnrollmentSheet
             cycles={catalogs.cycles}
             operationalCycleId={cycle.id}
@@ -54,7 +52,7 @@ export default async function AdminPage() {
             classifications={catalogs.classifications}
             financialCoverage={financialCoverageResult.data}
             discountCategories={discountCategoriesResult.data}
-            triggerLabel="Registrar alumno"
+            triggerLabel="Nueva matrícula"
             triggerClassName="min-w-44"
           />
         </div>
@@ -70,6 +68,15 @@ export default async function AdminPage() {
           No pudimos actualizar algunos datos del inicio. Intenta recargar la página.
         </p>
       )}
+
+      <aside aria-label="Resumen del día" className="space-y-3">
+        <h2 className="text-base font-semibold">Hoy</h2>
+        <div className="rounded-xl border border-border bg-white">
+          <SummaryItem label="Pagos del día" value={formatCurrency(home.paymentsToday)} />
+          <SummaryItem label="Saldo vencido del ciclo" value={formatCurrency(home.overdueTotal)} />
+          <SummaryItem label="Alumnos pendientes" value={String(home.pendingStudents)} />
+        </div>
+      </aside>
 
       <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-7">
@@ -117,14 +124,6 @@ export default async function AdminPage() {
           </section>
         </div>
 
-        <aside aria-label="Resumen del día" className="space-y-3">
-          <h2 className="text-base font-semibold">Hoy</h2>
-          <div className="rounded-xl border border-border bg-white">
-            <SummaryItem label="Pagos del día" value={formatCurrency(home.paymentsToday)} />
-            <SummaryItem label="Saldo vencido del ciclo" value={formatCurrency(home.overdueTotal)} />
-            <SummaryItem label="Alumnos pendientes" value={String(home.pendingStudents)} />
-          </div>
-        </aside>
       </div>
     </div>
   )

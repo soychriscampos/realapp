@@ -1,7 +1,8 @@
 "use client"
 
 import { Filter, Search } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,6 +23,32 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
   const [levelId, setLevelId] = useState(values.level ?? "")
   const [gradeId, setGradeId] = useState(values.grade ?? "")
   const [groupId, setGroupId] = useState(values.group ?? "")
+  const [query, setQuery] = useState(values.query ?? "")
+  const queryEditedRef = useRef(false)
+  const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    if (!queryEditedRef.current) return
+
+    const nextQuery = query.trim()
+    const currentQuery = searchParams.get("query") ?? ""
+    if (nextQuery === currentQuery) {
+      queryEditedRef.current = false
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (nextQuery) params.set("query", nextQuery)
+      else params.delete("query")
+      queryEditedRef.current = false
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+    }, 300)
+
+    return () => window.clearTimeout(timeout)
+  }, [pathname, query, router, searchParams])
 
   const availableGrades = levelId
     ? grades.filter((grade) => grade.education_level_id === levelId)
@@ -35,12 +62,16 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
   return (
     <form action="/admin/matricula" className="space-y-3">
       <input type="hidden" name="cycle" value={values.cycle ?? ""} />
-      <div className="relative max-w-xl">
+      <div className="relative w-full">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           name="query"
-          defaultValue={values.query ?? ""}
-          placeholder="Buscar dentro de resultados..."
+          value={query}
+          onChange={(event) => {
+            queryEditedRef.current = true
+            setQuery(event.target.value)
+          }}
+          placeholder="Busca alumno por su nombre"
           aria-label="Buscar dentro de resultados"
           className="h-11 bg-white pl-10"
         />

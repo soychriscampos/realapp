@@ -174,7 +174,7 @@ function NavigationItem({
       className={cn(
         "flex items-center gap-3 rounded-lg text-sm font-medium transition focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
         compact
-          ? "min-h-11 flex-col justify-center gap-1 px-2 text-[11px]"
+          ? "min-h-11 w-full flex-col items-center justify-center gap-1 px-2 text-center text-[11px]"
           : "h-10 px-3",
         isActive
           ? "bg-muted text-foreground"
@@ -255,7 +255,7 @@ function UserMenu({
 function MobileBottomNavigation({ navigation }: { navigation: typeof primaryNavigation }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
-      <div className="mx-auto grid min-h-16 max-w-md grid-cols-4 items-center gap-1">
+      <div className="mx-auto grid min-h-16 max-w-md grid-cols-3 items-center justify-items-center gap-1">
         {mobileNavigation.map((item) => (
           <NavigationItem key={item.href} item={item} compact />
         ))}
@@ -268,7 +268,7 @@ function MobileBottomNavigation({ navigation }: { navigation: typeof primaryNavi
 function MoreSheet({ items }: { items: typeof primaryNavigation }) {
   return (
     <Dialog.Root>
-      <Dialog.Trigger className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg px-2 text-[11px] font-medium text-muted-foreground outline-none transition hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
+      <Dialog.Trigger className="flex min-h-11 w-full flex-col items-center justify-center gap-1 rounded-lg px-2 text-[11px] font-medium text-muted-foreground outline-none transition hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
         <MenuIcon className="size-4" />
         <span>Más</span>
       </Dialog.Trigger>
