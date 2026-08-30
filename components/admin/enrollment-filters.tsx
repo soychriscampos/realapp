@@ -17,9 +17,10 @@ type EnrollmentFiltersProps = {
   grades: Array<Option & { education_level_id: string }>
   groups: Array<Option & { code: string; grade_level_id: string; cycle_id: string }>
   classifications: Option[]
+  applied: boolean
 }
 
-export function EnrollmentFilters({ values, situations, levels, grades, groups, classifications }: EnrollmentFiltersProps) {
+export function EnrollmentFilters({ values, situations, levels, grades, groups, classifications, applied }: EnrollmentFiltersProps) {
   const [levelId, setLevelId] = useState(values.level ?? "")
   const [gradeId, setGradeId] = useState(values.grade ?? "")
   const [groupId, setGroupId] = useState(values.group ?? "")
@@ -30,7 +31,7 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    if (!queryEditedRef.current) return
+    if (!applied || !queryEditedRef.current) return
 
     const nextQuery = query.trim()
     const currentQuery = searchParams.get("query") ?? ""
@@ -48,7 +49,7 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
     }, 300)
 
     return () => window.clearTimeout(timeout)
-  }, [pathname, query, router, searchParams])
+  }, [applied, pathname, query, router, searchParams])
 
   const availableGrades = levelId
     ? grades.filter((grade) => grade.education_level_id === levelId)
@@ -62,6 +63,7 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
   return (
     <form action="/admin/matricula" className="space-y-3">
       <input type="hidden" name="cycle" value={values.cycle ?? ""} />
+      <input type="hidden" name="applied" value="1" />
       <div className="relative w-full">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -71,7 +73,7 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
             queryEditedRef.current = true
             setQuery(event.target.value)
           }}
-          placeholder="Busca alumno por su nombre"
+          placeholder="Buscar alumno por nombre o apellido..."
           aria-label="Buscar dentro de resultados"
           className="h-11 bg-white pl-10"
         />
@@ -93,6 +95,7 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
           label="Grado"
           name="grade"
           value={gradeId}
+          disabled={!levelId}
           options={availableGrades.map((grade) => ({
             ...grade,
             name: levelId ? grade.name : `${levels.find((level) => level.id === grade.education_level_id)?.name ?? "Nivel"} · ${grade.name}`,
@@ -106,6 +109,7 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
           label="Grupo"
           name="group"
           value={groupId}
+          disabled={!gradeId}
           options={availableGroups.map((group) => ({ ...group, name: getEnrollmentGroupLabel(group) }))}
           onChange={setGroupId}
         />
@@ -117,16 +121,17 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
   )
 }
 
-function FilterSelect({ label, name, value, options, onChange, emptyLabel = "Todos" }: { label: string; name: string; value?: string; options: Option[]; onChange?: (value: string) => void; emptyLabel?: string }) {
+function FilterSelect({ label, name, value, options, onChange, emptyLabel = "Todos", disabled = false }: { label: string; name: string; value?: string; options: Option[]; onChange?: (value: string) => void; emptyLabel?: string; disabled?: boolean }) {
   return (
     <label className="w-36">
       <span className="mb-1 block text-xs text-muted-foreground">{label}</span>
       <select
         name={name}
+        disabled={disabled}
         {...(onChange
           ? { value: value ?? "", onChange: (event: React.ChangeEvent<HTMLSelectElement>) => onChange(event.target.value) }
           : { defaultValue: value ?? "" })}
-        className="h-10 w-full rounded-lg border border-input bg-white px-2.5 text-sm outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/50"
+        className="h-10 w-full rounded-lg border border-input bg-white px-2.5 text-sm outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70"
       >
         <option value="">{emptyLabel}</option>
         {options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}

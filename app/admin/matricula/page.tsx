@@ -34,6 +34,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
 
   if (catalogsError || !catalogs) return <EnrollmentLoadError />
 
+  const applied = value(params.applied) === "1"
   const values = {
     cycle: value(params.cycle) ?? catalogs.operationalCycle?.id ?? catalogs.cycles[0]?.id,
     query: value(params.query),
@@ -60,8 +61,8 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
   const statuses = enrollmentStatusesForSituation(situation, selectedCycle?.status)
   const previousCycle = supportsContinuity
     ? catalogs.cycles
-        .filter((cycle) => cycle.starts_on < selectedCycle.starts_on)
-        .sort((left, right) => right.starts_on.localeCompare(left.starts_on))[0]
+      .filter((cycle) => cycle.starts_on < selectedCycle.starts_on)
+      .sort((left, right) => right.starts_on.localeCompare(left.starts_on))[0]
     : undefined
 
   const [groupsResult, enrollmentResult, activeCountResult, financialCoverageResult, discountCategoriesResult, paymentContextResult] = await Promise.all([
@@ -70,7 +71,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
       .select("id, name, code, cycle_id, grade_level_id")
       .eq("is_active", true)
       .order("name"),
-    statuses.length
+    applied && statuses.length
       ? getEnrollments(supabase, {
         cycleId: values.cycle,
         query: values.query,
@@ -91,7 +92,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
     return <EnrollmentLoadError />
   }
 
-  const bulkCandidatesResult = supportsContinuity && previousCycle
+  const bulkCandidatesResult = applied && supportsContinuity && previousCycle
     ? await getBulkEnrollmentCandidates(supabase, previousCycle.id, selectedCycle.id)
     : { data: [], error: false }
   const bulkDiscountCandidatesResult = isActiveOperationalCycle
@@ -207,16 +208,23 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
           grades={catalogs.grades}
           groups={(groupsResult.data ?? []).filter((group) => group.cycle_id === values.cycle)}
           classifications={catalogs.classifications}
+          applied={applied}
         />
 
-        <EnrollmentSituationResults
-          situation={situation}
-          enrollments={enrollmentResult.data}
-          pendingCandidates={includesPendingCandidates(situation, supportsContinuity)
-            ? filterPendingCandidates(bulkCandidatesResult.data, values)
-            : []}
-          pendingLoadError={bulkCandidatesResult.error}
-        />
+        {applied ? (
+          <EnrollmentSituationResults
+            situation={situation}
+            enrollments={enrollmentResult.data}
+            pendingCandidates={includesPendingCandidates(situation, supportsContinuity)
+              ? filterPendingCandidates(bulkCandidatesResult.data, values)
+              : []}
+            pendingLoadError={bulkCandidatesResult.error}
+          />
+        ) : (
+          <p className="border-y border-border py-8 text-center text-sm text-muted-foreground">
+            Busca o aplica filtros para ver alumnos.
+          </p>
+        )}
       </>}
     </div>
   )
