@@ -151,6 +151,14 @@ export type BulkEnrollmentResult = {
   message: string | null
 }
 
+export type NoContinuaResult = {
+  studentId: string
+  enrollmentId: string | null
+  success: boolean
+  alreadyProcessed: boolean
+  message: string | null
+}
+
 type BulkTuitionDiscountItem = {
   enrollmentId: string
   studentId: string
@@ -1228,6 +1236,40 @@ export async function graduateEnrollment(input: {
   if (error) return { ok: false, message: mapEnrollmentError(error.message, "graduation") }
   revalidatePath("/admin/matricula")
   return { ok: true }
+}
+
+export async function markEnrollmentsNoContinua(input: {
+  sourceEnrollmentIds: string[]
+  targetCycleId: string
+}): Promise<{ ok: true; results: NoContinuaResult[] } | { ok: false; message: string }> {
+  const sourceEnrollmentIds = [...new Set(input.sourceEnrollmentIds.filter(Boolean))]
+  if (!sourceEnrollmentIds.length || !input.targetCycleId) {
+    return { ok: false, message: "Selecciona alumnos y un ciclo destino válido." }
+  }
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { data, error } = await supabase.rpc("mark_enrollments_no_continua", {
+    p_source_enrollment_ids: sourceEnrollmentIds,
+    p_target_cycle_id: input.targetCycleId,
+  })
+  if (error || !Array.isArray(data)) return { ok: false, message: mapEnrollmentError(error?.message, "no_continua") }
+
+  const results = data.flatMap((item): NoContinuaResult[] => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return []
+    const row = item as Record<string, unknown>
+    const studentId = typeof row.student_id === "string" ? row.student_id : ""
+    if (!studentId) return []
+    return [{
+      studentId,
+      enrollmentId: typeof row.enrollment_id === "string" ? row.enrollment_id : null,
+      success: row.success === true,
+      alreadyProcessed: row.already_processed === true,
+      message: row.success === true ? null : mapEnrollmentError(typeof row.error === "string" ? row.error : undefined, "no_continua"),
+    }]
+  })
+  if (results.length !== sourceEnrollmentIds.length) return { ok: false, message: "No pudimos interpretar el resultado. Actualiza la pantalla e inténtalo de nuevo." }
+  revalidatePath("/admin/matricula")
+  for (const result of results.filter((item) => item.success)) revalidatePath(`/admin/alumnos/${result.studentId}`)
+  return { ok: true, results }
 }
 
 export async function closeSchoolCycle(input: {

@@ -5,6 +5,7 @@ import { EnrollmentCycleSelect } from "@/components/admin/enrollment-cycle-selec
 import { EnrollmentList } from "@/components/admin/enrollment-list"
 import { PendingEnrollmentCandidatesList } from "@/components/admin/pending-enrollment-candidates-list"
 import { BulkEnrollmentActivationSheet } from "@/components/admin/bulk-enrollment-activation-sheet"
+import { BulkNoContinuaSheet } from "@/components/admin/bulk-no-continua-sheet"
 import { BulkTuitionDiscountSheet } from "@/components/admin/bulk-tuition-discount-sheet"
 import { CloseCycleSheet } from "@/components/admin/close-cycle-sheet"
 import { FinalizeCycleSheet } from "@/components/admin/finalize-cycle-sheet"
@@ -13,7 +14,7 @@ import { PreregistrationCampaignSheet } from "@/components/admin/preregistration
 import { PreregistrationEnrollmentSheet } from "@/components/admin/preregistration-enrollment-sheet"
 import { PreregistrationIntakeSheet } from "@/components/admin/preregistration-intake-sheet"
 import { StudentModuleNav } from "@/components/admin/student-module-nav"
-import { getBulkEnrollmentCandidates, type BulkEnrollmentCandidate } from "@/lib/admin/bulk-enrollment"
+import { getBulkEnrollmentCandidates, getNoContinuaCandidates, type BulkEnrollmentCandidate, type NoContinuaCandidate } from "@/lib/admin/bulk-enrollment"
 import { getBulkTuitionDiscountCandidates } from "@/lib/admin/bulk-tuition-discounts"
 import { getTuitionDiscountCategories } from "@/lib/admin/discount-categories"
 import { getActiveEnrollmentCount, getEnrollmentFinancialCoverage, getEnrollments, type EnrollmentListItem } from "@/lib/admin/enrollments"
@@ -92,9 +93,12 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
     return <EnrollmentLoadError />
   }
 
-  const bulkCandidatesResult = applied && supportsContinuity && previousCycle
-    ? await getBulkEnrollmentCandidates(supabase, previousCycle.id, selectedCycle.id)
-    : { data: [], error: false }
+  const [bulkCandidatesResult, noContinuaCandidatesResult] = applied && supportsContinuity && previousCycle
+    ? await Promise.all([
+      getBulkEnrollmentCandidates(supabase, previousCycle.id, selectedCycle.id),
+      getNoContinuaCandidates(supabase, previousCycle.id, selectedCycle.id, catalogs.grades, catalogs.levels),
+    ])
+    : [{ data: [], error: false }, { data: [], error: false }] as [{ data: BulkEnrollmentCandidate[]; error: boolean }, { data: NoContinuaCandidate[]; error: boolean }]
   const bulkDiscountCandidatesResult = isActiveOperationalCycle
     ? await getBulkTuitionDiscountCandidates(supabase, selectedCycle.id)
     : { data: [], error: false }
@@ -185,6 +189,12 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
             financialCoverage={financialCoverageResult.data}
             discountCategories={discountCategoriesResult.data}
           />
+          <BulkNoContinuaSheet
+            cycle={selectedCycle}
+            previousCycleName={previousCycle.name}
+            candidates={noContinuaCandidatesResult.data}
+            loadError={noContinuaCandidatesResult.error}
+          />
         </div>
       )}
 
@@ -220,11 +230,7 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
               : []}
             pendingLoadError={bulkCandidatesResult.error}
           />
-        ) : (
-          <p className="border-y border-border py-8 text-center text-sm text-muted-foreground">
-            Busca o aplica filtros para ver alumnos.
-          </p>
-        )}
+        ) : null}
       </>}
     </div>
   )

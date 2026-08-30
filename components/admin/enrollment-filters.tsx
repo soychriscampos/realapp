@@ -1,6 +1,6 @@
 "use client"
 
-import { Filter, Search } from "lucide-react"
+import { Filter, LoaderCircle, Search } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
@@ -24,14 +24,17 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
   const [levelId, setLevelId] = useState(values.level ?? "")
   const [gradeId, setGradeId] = useState(values.grade ?? "")
   const [groupId, setGroupId] = useState(values.group ?? "")
+  const [situationId, setSituationId] = useState(values.situation ?? "")
+  const [classificationId, setClassificationId] = useState(values.classification ?? "")
   const [query, setQuery] = useState(values.query ?? "")
   const queryEditedRef = useRef(false)
+  const [isSearching, setIsSearching] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    if (!applied || !queryEditedRef.current) return
+    if (!queryEditedRef.current) return
 
     const nextQuery = query.trim()
     const currentQuery = searchParams.get("query") ?? ""
@@ -44,12 +47,14 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
       const params = new URLSearchParams(searchParams.toString())
       if (nextQuery) params.set("query", nextQuery)
       else params.delete("query")
+      params.set("applied", "1")
       queryEditedRef.current = false
+      setIsSearching(true)
       router.replace(`${pathname}?${params.toString()}`, { scroll: false })
     }, 300)
 
     return () => window.clearTimeout(timeout)
-  }, [applied, pathname, query, router, searchParams])
+  }, [pathname, query, router, searchParams])
 
   const availableGrades = levelId
     ? grades.filter((grade) => grade.education_level_id === levelId)
@@ -61,7 +66,8 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
       : groups
 
   return (
-    <form action="/admin/matricula" className="space-y-3">
+    <>
+    <form action="/admin/matricula" className="space-y-3" onSubmit={() => setIsSearching(true)}>
       <input type="hidden" name="cycle" value={values.cycle ?? ""} />
       <input type="hidden" name="applied" value="1" />
       <div className="relative w-full">
@@ -113,11 +119,17 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
           options={availableGroups.map((group) => ({ ...group, name: getEnrollmentGroupLabel(group) }))}
           onChange={setGroupId}
         />
-        <FilterSelect label="Matrícula" name="situation" value={values.situation} options={situations} emptyLabel="Todas" />
-        <FilterSelect label="Clasificación" name="classification" value={values.classification} options={classifications} />
+        <FilterSelect label="Matrícula" name="situation" value={situationId} options={situations} emptyLabel="Todas" onChange={setSituationId} />
+        <FilterSelect label="Clasificación" name="classification" value={classificationId} options={classifications} onChange={setClassificationId} />
         <Button type="submit" variant="outline" className="h-10 bg-white"><Filter /> Aplicar</Button>
       </div>
     </form>
+    {!applied && (
+      <p className="flex items-center justify-center gap-2 border-y border-border py-8 text-center text-sm text-muted-foreground">
+        {isSearching ? <><LoaderCircle className="size-4 animate-spin" /> Buscando...</> : "Busca o aplica filtros para ver alumnos."}
+      </p>
+    )}
+    </>
   )
 }
 

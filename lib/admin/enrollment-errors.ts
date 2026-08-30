@@ -1,4 +1,4 @@
-export type EnrollmentErrorContext = "activation" | "preregistration" | "plan" | "group" | "classification" | "grade" | "dates" | "withdrawal" | "reactivation" | "finalization" | "graduation" | "cycle_closure"
+export type EnrollmentErrorContext = "activation" | "preregistration" | "plan" | "group" | "classification" | "grade" | "dates" | "withdrawal" | "reactivation" | "finalization" | "graduation" | "cycle_closure" | "no_continua"
 
 export function mapEnrollmentError(message: string | undefined, context: EnrollmentErrorContext) {
   const technicalMessage = message?.trim() ?? ""
@@ -167,6 +167,12 @@ export function mapEnrollmentError(message: string | undefined, context: Enrollm
     }
   }
 
+  if (context === "no_continua") {
+    if (normalized.includes("already has an enrollment")) friendlyMessage = "El alumno ya tiene una matrícula registrada para el ciclo destino."
+    else if (normalized.includes("only finalizada")) friendlyMessage = "Sólo se puede marcar como No continúa una matrícula finalizada del ciclo anterior."
+    else if (normalized.includes("previous cycle")) friendlyMessage = "La matrícula seleccionada no corresponde al ciclo anterior inmediato."
+  }
+
   if (normalized.includes("permission") || normalized.includes("authentication")) {
     friendlyMessage = context === "withdrawal"
       ? "No tienes autorización para registrar esta baja."
@@ -180,6 +186,8 @@ export function mapEnrollmentError(message: string | undefined, context: Enrollm
           ? "No tienes autorización para corregir los datos académicos."
         : context === "cycle_closure"
           ? "No tienes autorización para cerrar el ciclo escolar."
+        : context === "no_continua"
+          ? "No tienes autorización para marcar matrículas como No continúa."
         : context === "activation" || context === "preregistration"
           ? "No tienes autorización para crear esta matrícula."
           : `No tienes autorización para ${context === "plan" ? "cambiar el plan financiero" : context === "group" ? "cambiar el grupo" : "cambiar la clasificación"}.`
@@ -204,6 +212,7 @@ function defaultMessage(context: EnrollmentErrorContext) {
   if (context === "finalization") return "No pudimos finalizar las matrículas. Revisa los datos e inténtalo de nuevo."
   if (context === "graduation") return "No pudimos registrar el egreso. Revisa los datos e inténtalo de nuevo."
   if (context === "cycle_closure") return "No pudimos cerrar el ciclo escolar. Revisa los datos e inténtalo de nuevo."
+  if (context === "no_continua") return "No pudimos registrar la no continuidad. Revisa los datos e inténtalo de nuevo."
   return "No pudimos reactivar la matrícula. Revisa los datos e inténtalo de nuevo."
 }
 
