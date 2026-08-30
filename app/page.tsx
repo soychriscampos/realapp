@@ -2,7 +2,7 @@ import Link from "next/link"
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-white text-neutral-950">
+    <main className="min-h-screen bg-[#f7f7f8] text-neutral-950">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 py-8 sm:px-10 lg:px-16">
         <header className="flex items-center">
           <img
@@ -39,7 +39,7 @@ export default function HomePage() {
         </section>
 
         <footer className="flex items-center justify-between border-t border-neutral-200 pt-5 text-xs text-neutral-400">
-          <span>© Colegio REAL de Escuinapa</span>
+          <span>© {new Date().getFullYear()} · Colegio REAL de Escuinapa</span>
           <span>colegioreal.app</span>
         </footer>
       </div>

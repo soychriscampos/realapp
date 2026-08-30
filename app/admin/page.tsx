@@ -53,7 +53,7 @@ export default async function AdminPage() {
             financialCoverage={financialCoverageResult.data}
             discountCategories={discountCategoriesResult.data}
             triggerLabel="Nueva matrícula"
-            triggerClassName="min-w-44"
+            triggerClassName="w-full min-w-44 sm:w-auto"
           />
         </div>
       </header>
