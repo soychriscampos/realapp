@@ -2,7 +2,7 @@
 
 import { Dialog } from "@base-ui/react/dialog"
 import { Toast } from "@base-ui/react/toast"
-import { CheckCircle2, ChevronLeft, LoaderCircle, Search, Users, X } from "lucide-react"
+import { CheckCircle2, ChevronLeft, LoaderCircle, X } from "lucide-react"
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 
@@ -26,9 +26,8 @@ type Level = { id: string; name: string; sort_order: number }
 type Grade = { id: string; name: string; education_level_id: string; sort_order: number }
 type Group = { id: string; name: string; code: string; cycle_id: string; grade_level_id: string }
 type Classification = { id: string; name: string }
-type Step = "candidates" | "configuration" | "review" | "results"
+type Step = "configuration" | "review" | "results"
 type CandidateConfiguration = {
-  selected: boolean
   gradeLevelId: string
   groupId: string
   classificationId: string
@@ -40,33 +39,31 @@ type CandidateConfiguration = {
 
 type BulkEnrollmentActivationSheetProps = {
   cycle: Cycle
-  previousCycleName: string
-  candidates: BulkEnrollmentCandidate[]
-  loadError: boolean
+  selectedCandidates: BulkEnrollmentCandidate[]
   levels: Level[]
   grades: Grade[]
   groups: Group[]
   classifications: Classification[]
   financialCoverage: EnrollmentFinancialCoverage[]
   discountCategories?: TuitionDiscountCategory[]
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }
 
 export function BulkEnrollmentActivationSheet({
   cycle,
-  previousCycleName,
-  candidates,
-  loadError,
+  selectedCandidates,
   levels,
   grades,
   groups,
   classifications,
   financialCoverage,
   discountCategories = [],
+  open,
+  onOpenChange,
 }: BulkEnrollmentActivationSheetProps) {
-  const [open, setOpen] = useState(false)
-  const [step, setStep] = useState<Step>("candidates")
-  const [configurations, setConfigurations] = useState<Record<string, CandidateConfiguration>>({})
-  const [query, setQuery] = useState("")
+  const [step, setStep] = useState<Step>("configuration")
+  const [configurations, setConfigurations] = useState<Record<string, CandidateConfiguration>>(() => initialConfigurations(selectedCandidates, levels, grades, groups, classifications, cycle.id))
   const [activatedOn, setActivatedOn] = useState(cycle.starts_on)
   const [classesStartOn, setClassesStartOn] = useState(cycle.starts_on)
   const [economicStartOn, setEconomicStartOn] = useState(cycle.starts_on)
@@ -75,14 +72,14 @@ export function BulkEnrollmentActivationSheet({
   const [reason, setReason] = useState("")
   const [feeCoverage, setFeeCoverage] = useState<Record<string, boolean> | null>(null)
   const [results, setResults] = useState<BulkEnrollmentResult[]>([])
+  const [submittedCandidates, setSubmittedCandidates] = useState<BulkEnrollmentCandidate[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const contentRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const toastManager = Toast.useToastManager()
+  const candidateIds = selectedCandidates.map((candidate) => candidate.studentId).join(",")
 
-  const selectedCandidates = candidates.filter((candidate) => configurations[candidate.studentId]?.selected)
-  const filteredCandidates = candidates.filter((candidate) => normalizeCandidateSearch(candidate).includes(query.trim().toLocaleLowerCase("es-MX")))
   const hasPreOrdinaryPeriod = selectedCandidates.some((candidate) => {
     const configuration = configurations[candidate.studentId]
     return getCandidateInitialPeriodState(configuration, grades, financialCoverage, cycle.id, economicStartOn).isBeforeFirstOrdinaryPeriod
@@ -93,48 +90,20 @@ export function BulkEnrollmentActivationSheet({
     contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
   }, [open, step])
 
-  function reset() {
-    setStep("candidates")
-    setQuery("")
-    setConfigurations(initialConfigurations(candidates, levels, grades, groups, classifications, cycle.id))
-    setActivatedOn(cycle.starts_on)
-    setClassesStartOn(cycle.starts_on)
-    setEconomicStartOn(cycle.starts_on)
-    setInitialPeriodDecision("WAIVE")
-    setInitialPeriodDueDate("")
-    setReason("")
-    setFeeCoverage(null)
-    setResults([])
-    setError(null)
-  }
-
-  function openSheet(nextOpen: boolean) {
-    setOpen(nextOpen)
-    if (nextOpen) reset()
-  }
+  useEffect(() => {
+    if (!candidateIds) return
+    startTransition(async () => {
+      const coverageResult = await getBulkEnrollmentFeeCoverage({ studentIds: candidateIds.split(","), cycleId: cycle.id })
+      if (coverageResult.ok) setFeeCoverage(coverageResult.coverage)
+      else setError(coverageResult.message)
+    })
+  }, [candidateIds, cycle.id])
 
   function updateConfiguration(studentId: string, patch: Partial<CandidateConfiguration>) {
     setConfigurations((current) => ({
       ...current,
       [studentId]: { ...current[studentId], ...patch },
     }))
-  }
-
-  function continueToConfiguration() {
-    if (!selectedCandidates.length) {
-      setError("Selecciona al menos un alumno para continuar.")
-      return
-    }
-    startTransition(async () => {
-      const coverageResult = await getBulkEnrollmentFeeCoverage({ studentIds: selectedCandidates.map((candidate) => candidate.studentId), cycleId: cycle.id })
-      if (!coverageResult.ok) {
-        setError(coverageResult.message)
-        return
-      }
-      setFeeCoverage(coverageResult.coverage)
-      setError(null)
-      setStep("configuration")
-    })
   }
 
   function review() {
@@ -178,6 +147,7 @@ export function BulkEnrollmentActivationSheet({
   function submit() {
     if (!feeCoverage) return
 
+    setSubmittedCandidates(selectedCandidates)
     startTransition(async () => {
       const result = await bulkCreateAndActivateEnrollments({
         items: selectedCandidates.map((candidate) => {
@@ -225,11 +195,7 @@ export function BulkEnrollmentActivationSheet({
   const failedResults = results.filter((result) => !result.success)
 
   return (
-    <Dialog.Root open={open} onOpenChange={openSheet}>
-      <Dialog.Trigger
-        disabled={!candidates.length && !loadError}
-        render={<Button variant="outline" className="h-10"><Users /> Activar alumnos del ciclo anterior</Button>}
-      />
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/25" />
         <Dialog.Popup className="fixed inset-0 z-50 flex flex-col bg-white outline-none sm:left-auto sm:w-[72vw] sm:border-l sm:border-border sm:shadow-xl md:w-[68vw] lg:w-1/2">
@@ -244,27 +210,6 @@ export function BulkEnrollmentActivationSheet({
           </header>
 
           <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6">
-            {step === "candidates" && (
-              <section className="space-y-5">
-                <div>
-                  <h2 className="text-lg font-semibold">Alumnos candidatos</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">Selecciona alumnos con matrícula en {previousCycleName} que aún no están inscritos en {cycle.name}.</p>
-                  <div className="relative mt-4"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar alumno..." aria-label="Buscar alumno en la lista" className="h-11 bg-white pl-10" /></div>
-                </div>
-                {candidates.length ? filteredCandidates.length ? (
-                  <div className="overflow-hidden rounded-xl border border-border bg-white">
-                    {filteredCandidates.map((candidate) => {
-                      const configuration = configurations[candidate.studentId]
-                      return <label key={candidate.studentId} className="flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-muted/50">
-                        <input type="checkbox" checked={configuration?.selected ?? false} onChange={(event) => updateConfiguration(candidate.studentId, { selected: event.target.checked })} className="mt-1 size-4 accent-primary" />
-                        <span className="min-w-0"><span className="block truncate text-sm font-medium">{candidate.fullName}</span><span className="mt-1 block text-xs text-muted-foreground">{candidate.studentCode ?? "Sin código"}</span><span className="mt-1 block text-sm text-muted-foreground">{candidate.previousGrade.educationLevelName} {candidate.previousGrade.name} · {statusLabel(candidate.previousStatus)}</span></span>
-                      </label>
-                    })}
-                  </div>
-                ) : <p className="border-y border-border py-8 text-center text-sm text-muted-foreground">No encontramos alumnos.</p> : loadError ? <CandidateLoadError /> : <EmptyCandidates />}
-              </section>
-            )}
-
             {step === "configuration" && (
               <section className="space-y-6">
                 <div>
@@ -323,14 +268,14 @@ export function BulkEnrollmentActivationSheet({
             {step === "results" && (
               <section className="space-y-5">
                 <div><CheckCircle2 className="size-9 text-emerald-600" /><h2 className="mt-3 text-lg font-semibold">Activación masiva completada</h2><p className="mt-1 text-sm text-muted-foreground">{successfulResults.length} activado{successfulResults.length === 1 ? "" : "s"} correctamente · {failedResults.length} con error.</p></div>
-                {failedResults.length > 0 && <div className="space-y-3"><h3 className="text-sm font-semibold">Alumnos con error</h3><div className="overflow-hidden rounded-xl border border-border bg-white">{failedResults.map((result) => { const candidate = candidates.find((item) => item.studentId === result.studentId); return <div key={result.studentId} className="border-b border-border px-4 py-3 last:border-b-0"><p className="text-sm font-medium">{candidate?.fullName ?? "Alumno"}</p><p className="mt-1 text-sm text-destructive">{result.message ?? "No pudimos activar esta matrícula."}</p></div> })}</div></div>}
-                {successfulResults.length > 0 && <div className="overflow-hidden rounded-xl border border-border bg-white">{successfulResults.map((result) => { const candidate = candidates.find((item) => item.studentId === result.studentId); return <div key={result.studentId} className="border-b border-border px-4 py-3 text-sm last:border-b-0">{candidate?.fullName ?? "Alumno"}</div> })}</div>}
+                {failedResults.length > 0 && <div className="space-y-3"><h3 className="text-sm font-semibold">Alumnos con error</h3><div className="overflow-hidden rounded-xl border border-border bg-white">{failedResults.map((result) => { const candidate = submittedCandidates.find((item) => item.studentId === result.studentId); return <div key={result.studentId} className="border-b border-border px-4 py-3 last:border-b-0"><p className="text-sm font-medium">{candidate?.fullName ?? "Alumno"}</p><p className="mt-1 text-sm text-destructive">{result.message ?? "No pudimos activar esta matrícula."}</p></div> })}</div></div>}
+                {successfulResults.length > 0 && <div className="overflow-hidden rounded-xl border border-border bg-white">{successfulResults.map((result) => { const candidate = submittedCandidates.find((item) => item.studentId === result.studentId); return <div key={result.studentId} className="border-b border-border px-4 py-3 text-sm last:border-b-0">{candidate?.fullName ?? "Alumno"}</div> })}</div>}
               </section>
             )}
           </div>
 
           {error && <p className="border-t border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:px-6" role="alert">{error}</p>}
-          {step !== "results" && <footer className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] sm:px-6"><Button variant="ghost" className="h-10" disabled={isPending || step === "candidates"} onClick={() => { setError(null); setStep(step === "review" ? "configuration" : "candidates") }}><ChevronLeft /> Atrás</Button>{step === "candidates" ? <Button className="h-10" disabled={!candidates.length} onClick={continueToConfiguration}>Continuar</Button> : step === "configuration" ? <Button className="h-10" disabled={isPending} onClick={review}>{isPending && <LoaderCircle className="animate-spin" />}{isPending ? "Consultando..." : "Revisar"}</Button> : <Button className="h-10" disabled={isPending} onClick={submit}>{isPending && <LoaderCircle className="animate-spin" />}{isPending ? "Activando..." : "Confirmar activaciones"}</Button>}</footer>}
+          {step !== "results" && <footer className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] sm:px-6"><Button variant="ghost" className="h-10" disabled={isPending} onClick={() => { setError(null); if (step === "review") setStep("configuration"); else onOpenChange(false) }}>{step === "review" ? <><ChevronLeft /> Atrás</> : "Cancelar"}</Button>{step === "configuration" ? <Button className="h-10" disabled={isPending || !feeCoverage} onClick={review}>{isPending && <LoaderCircle className="animate-spin" />}{isPending ? "Consultando..." : "Revisar"}</Button> : <Button className="h-10" disabled={isPending} onClick={submit}>{isPending && <LoaderCircle className="animate-spin" />}{isPending ? "Activando..." : "Confirmar activaciones"}</Button>}</footer>}
           {step === "results" && <footer className="flex justify-end border-t border-border px-4 py-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] sm:px-6"><Dialog.Close render={<Button className="h-10">Cerrar</Button>} /></footer>}
         </Dialog.Popup>
       </Dialog.Portal>
@@ -342,7 +287,6 @@ function initialConfigurations(candidates: BulkEnrollmentCandidate[], levels: Le
   return Object.fromEntries(candidates.map((candidate) => {
     const gradeLevelId = nextGradeId(candidate.previousGrade.id, grades, levels)
     return [candidate.studentId, {
-      selected: false,
       gradeLevelId,
       groupId: defaultGroupId(groups, cycleId, gradeLevelId),
       classificationId: classifications.some((classification) => classification.id === candidate.previousClassificationId)
@@ -399,14 +343,6 @@ function Summary({ label, value }: { label: string; value: string }) {
   return <div className="grid gap-1 py-3 sm:grid-cols-[11rem_1fr] sm:gap-4"><dt className="text-sm text-muted-foreground">{label}</dt><dd className="text-sm font-medium">{value}</dd></div>
 }
 
-function EmptyCandidates() {
-  return <div className="border-y border-border bg-white px-4 py-10 text-center"><p className="text-sm font-medium">No hay alumnos pendientes de continuidad.</p><p className="mt-1 text-sm text-muted-foreground">Los alumnos del ciclo anterior ya tienen matrícula en este ciclo.</p></div>
-}
-
-function CandidateLoadError() {
-  return <div className="border-y border-border bg-white px-4 py-10 text-center"><p className="text-sm font-medium">No pudimos cargar los alumnos candidatos.</p><p className="mt-1 text-sm text-muted-foreground">Actualiza la página e inténtalo de nuevo.</p></div>
-}
-
 function gradeLabel(grade: Grade, levels: Level[]) {
   const level = levels.find((item) => item.id === grade.education_level_id)
   return `${level?.name ?? ""}${level ? " " : ""}${grade.name}`
@@ -414,10 +350,6 @@ function gradeLabel(grade: Grade, levels: Level[]) {
 
 function statusLabel(status: string) {
   return { ACTIVA: "Activa", BAJA: "Baja", PREINSCRITA: "Preinscrita", PENDIENTE: "Pendiente", NO_CONTINUA: "No continúa" }[status] ?? status
-}
-
-function normalizeCandidateSearch(candidate: BulkEnrollmentCandidate) {
-  return `${candidate.fullName} ${candidate.studentCode ?? ""}`.toLocaleLowerCase("es-MX")
 }
 
 function formatDate(value: string) {
@@ -430,7 +362,7 @@ function isDate(value: string) {
 }
 
 function stepLabel(step: Exclude<Step, "results">) {
-  return step === "candidates" ? "1 de 3 · Selección" : step === "configuration" ? "2 de 3 · Configuración" : "3 de 3 · Revisión"
+  return step === "configuration" ? "1 de 2 · Configuración" : "2 de 2 · Revisión"
 }
 
 const selectClass = "h-10 w-full rounded-lg border border-input bg-white px-2.5 text-sm outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted"

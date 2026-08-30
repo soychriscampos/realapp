@@ -3,7 +3,7 @@
 import { Dialog } from "@base-ui/react/dialog"
 import { Menu } from "@base-ui/react/menu"
 import { Toast } from "@base-ui/react/toast"
-import { CalendarCheck, Ellipsis, LoaderCircle, X } from "lucide-react"
+import { CalendarCheck, LoaderCircle, X } from "lucide-react"
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 
@@ -22,7 +22,7 @@ export function BulkEnrollmentActions({ enrollments }: { enrollments: Enrollment
   return (
     <>
       <Menu.Root>
-        <Menu.Trigger render={<Button variant="outline" size="icon" aria-label="Acciones" title="Acciones"><Ellipsis /></Button>} />
+        <Menu.Trigger render={<Button variant="outline" className="h-10">Acciones</Button>} />
         <Menu.Portal>
           <Menu.Positioner align="end" sideOffset={6}>
             <Menu.Popup className="z-50 min-w-52 rounded-xl border border-border bg-white p-1 shadow-lg outline-none">

@@ -1,9 +1,8 @@
 "use client"
 
 import { Dialog } from "@base-ui/react/dialog"
-import { Filter, LoaderCircle, Search, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { Filter, Search, X } from "lucide-react"
+import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,44 +18,17 @@ type EnrollmentFiltersProps = {
   groups: Array<Option & { code: string; grade_level_id: string; cycle_id: string }>
   classifications: Option[]
   applied: boolean
+  query?: string
+  onQueryChange?: (value: string) => void
 }
 
-export function EnrollmentFilters({ values, situations, levels, grades, groups, classifications, applied }: EnrollmentFiltersProps) {
+export function EnrollmentFilters({ values, situations, levels, grades, groups, classifications, applied, query = "", onQueryChange }: EnrollmentFiltersProps) {
   const [levelId, setLevelId] = useState(values.level ?? "")
   const [gradeId, setGradeId] = useState(values.grade ?? "")
   const [groupId, setGroupId] = useState(values.group ?? "")
   const [situationId, setSituationId] = useState(values.situation ?? "")
   const [classificationId, setClassificationId] = useState(values.classification ?? "")
-  const [query, setQuery] = useState(values.query ?? "")
-  const queryEditedRef = useRef(false)
-  const [isSearching, setIsSearching] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const pathname = usePathname()
-  const router = useRouter()
-  const searchParams = useSearchParams()
-
-  useEffect(() => {
-    if (!queryEditedRef.current) return
-
-    const nextQuery = query.trim()
-    const currentQuery = searchParams.get("query") ?? ""
-    if (nextQuery === currentQuery) {
-      queryEditedRef.current = false
-      return
-    }
-
-    const timeout = window.setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (nextQuery) params.set("query", nextQuery)
-      else params.delete("query")
-      params.set("applied", "1")
-      queryEditedRef.current = false
-      setIsSearching(true)
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-    }, 300)
-
-    return () => window.clearTimeout(timeout)
-  }, [pathname, query, router, searchParams])
 
   const availableGrades = levelId
     ? grades.filter((grade) => grade.education_level_id === levelId)
@@ -69,24 +41,9 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
 
   return (
     <>
-    <form action="/admin/matricula" className="space-y-3" onSubmit={() => setIsSearching(true)}>
+    <form action="/admin/matricula" className="space-y-3">
       <input type="hidden" name="cycle" value={values.cycle ?? ""} />
       <input type="hidden" name="applied" value="1" />
-      <div className="relative w-full">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          name="query"
-          value={query}
-          onChange={(event) => {
-            queryEditedRef.current = true
-            setQuery(event.target.value)
-          }}
-          placeholder="Buscar alumno por nombre o apellido..."
-          aria-label="Buscar dentro de resultados"
-          className="h-11 bg-white pl-10"
-        />
-      </div>
-
       <div className="hidden flex-wrap items-end gap-3 md:flex">
         <FilterFields
           levelId={levelId}
@@ -119,9 +76,8 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
               <Dialog.Title className="text-base font-semibold">Filtros</Dialog.Title>
               <Dialog.Close aria-label="Cerrar filtros" className="flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"><X className="size-4" /></Dialog.Close>
             </header>
-            <form action="/admin/matricula" className="min-h-0 flex-1 overflow-y-auto" onSubmit={() => { setIsSearching(true); setFiltersOpen(false) }}>
+            <form action="/admin/matricula" className="min-h-0 flex-1 overflow-y-auto" onSubmit={() => setFiltersOpen(false)}>
               <input type="hidden" name="cycle" value={values.cycle ?? ""} />
-              <input type="hidden" name="query" value={query} />
               <input type="hidden" name="applied" value="1" />
               <div className="grid gap-4 px-4 py-5">
                 <FilterFields
@@ -150,11 +106,19 @@ export function EnrollmentFilters({ values, situations, levels, grades, groups, 
         </Dialog.Portal>
       </Dialog.Root>
     </div>
-    {!applied && (
-      <p className="flex items-center justify-center gap-2 border-y border-border py-8 text-center text-sm text-muted-foreground">
-        {isSearching ? <><LoaderCircle className="size-4 animate-spin" /> Buscando...</> : "Busca o aplica filtros para ver alumnos."}
-      </p>
+    {applied && (
+      <div className="relative w-full">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(event) => onQueryChange?.(event.target.value)}
+          placeholder="Busca alumno dentro de esta lista"
+          aria-label="Busca alumno dentro de esta lista"
+          className="h-11 bg-white pl-10"
+        />
+      </div>
     )}
+    {!applied && <p className="flex items-center justify-center border-y border-border py-8 text-center text-sm text-muted-foreground">Aplica filtros para ver alumnos.</p>}
     </>
   )
 }

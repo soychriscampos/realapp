@@ -1,11 +1,8 @@
 import Link from "next/link"
 
-import { EnrollmentFilters } from "@/components/admin/enrollment-filters"
 import { EnrollmentCycleSelect } from "@/components/admin/enrollment-cycle-select"
-import { EnrollmentList } from "@/components/admin/enrollment-list"
-import { PendingEnrollmentCandidatesList } from "@/components/admin/pending-enrollment-candidates-list"
-import { BulkEnrollmentActivationSheet } from "@/components/admin/bulk-enrollment-activation-sheet"
-import { BulkNoContinuaSheet } from "@/components/admin/bulk-no-continua-sheet"
+import { EnrollmentFilters } from "@/components/admin/enrollment-filters"
+import { EnrollmentSituationResults } from "@/components/admin/enrollment-situation-results"
 import { BulkTuitionDiscountSheet } from "@/components/admin/bulk-tuition-discount-sheet"
 import { CloseCycleSheet } from "@/components/admin/close-cycle-sheet"
 import { FinalizeCycleSheet } from "@/components/admin/finalize-cycle-sheet"
@@ -75,7 +72,6 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
     applied && statuses.length
       ? getEnrollments(supabase, {
         cycleId: values.cycle,
-        query: values.query,
         educationLevelId: values.level,
         gradeLevelId: values.grade,
         groupId: values.group,
@@ -176,29 +172,6 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
         </div>
       )}
 
-      {values.tab === "matricula" && situation === "pending" && supportsContinuity && previousCycle && (
-        <div className="flex flex-wrap gap-2">
-          <BulkEnrollmentActivationSheet
-            cycle={selectedCycle}
-            previousCycleName={previousCycle.name}
-            candidates={bulkCandidatesResult.data}
-            loadError={bulkCandidatesResult.error}
-            levels={catalogs.levels}
-            grades={catalogs.grades}
-            groups={groupsResult.data ?? []}
-            classifications={catalogs.classifications}
-            financialCoverage={financialCoverageResult.data}
-            discountCategories={discountCategoriesResult.data}
-          />
-          <BulkNoContinuaSheet
-            cycle={selectedCycle}
-            previousCycleName={previousCycle.name}
-            candidates={noContinuaCandidatesResult.data}
-            loadError={noContinuaCandidatesResult.error}
-          />
-        </div>
-      )}
-
       {values.tab === "matricula" && isActiveOperationalCycle && (
         <div className="flex flex-wrap gap-2">
           <BulkTuitionDiscountSheet
@@ -211,17 +184,17 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
       )}
 
       {values.tab === "matricula" && <>
-        <EnrollmentFilters
-          key={`${values.cycle}-${values.situation}-${values.level ?? ""}-${values.grade ?? ""}-${values.group ?? ""}`}
-          values={values}
-          situations={situationOptions}
-          levels={catalogs.levels}
-          grades={catalogs.grades}
-          groups={(groupsResult.data ?? []).filter((group) => group.cycle_id === values.cycle)}
-          classifications={catalogs.classifications}
-          applied={applied}
-        />
-
+        {!applied && (
+          <EnrollmentFilters
+            values={values}
+            situations={situationOptions}
+            levels={catalogs.levels}
+            grades={catalogs.grades}
+            groups={(groupsResult.data ?? []).filter((group) => group.cycle_id === values.cycle)}
+            classifications={catalogs.classifications}
+            applied={false}
+          />
+        )}
         {applied ? (
           <EnrollmentSituationResults
             situation={situation}
@@ -229,7 +202,20 @@ export default async function EnrollmentPage({ searchParams }: EnrollmentPagePro
             pendingCandidates={includesPendingCandidates(situation, supportsContinuity)
               ? filterPendingCandidates(bulkCandidatesResult.data, values)
               : []}
+            noContinuaCandidates={includesPendingCandidates(situation, supportsContinuity)
+              ? noContinuaCandidatesResult.data
+              : []}
             pendingLoadError={bulkCandidatesResult.error}
+            pendingContextKey={`${values.cycle}:${values.situation}:${values.level ?? ""}:${values.grade ?? ""}:${values.group ?? ""}:${values.classification ?? ""}`}
+            pendingActivationProps={{ levels: catalogs.levels, grades: catalogs.grades, groups: groupsResult.data ?? [], classifications: catalogs.classifications, financialCoverage: financialCoverageResult.data, discountCategories: discountCategoriesResult.data }}
+            pendingCycle={{ id: values.cycle, name: selectedCycle?.name ?? "Ciclo escolar", starts_on: selectedCycle?.starts_on ?? "" }}
+            pendingPreviousCycleName={previousCycle?.name ?? "el ciclo anterior"}
+            filterValues={values}
+            situations={situationOptions}
+            levels={catalogs.levels}
+            grades={catalogs.grades}
+            groups={(groupsResult.data ?? []).filter((group) => group.cycle_id === values.cycle)}
+            classifications={catalogs.classifications}
           />
         ) : null}
       </>}
@@ -280,66 +266,12 @@ function includesPendingCandidates(situation: string, supportsContinuity: boolea
 }
 
 function filterPendingCandidates(candidates: BulkEnrollmentCandidate[], values: Record<string, string | undefined>) {
-  const query = normalizeSearch(values.query ?? "")
-
   return candidates.filter((candidate) => {
-    if (query && !normalizeSearch(`${candidate.fullName} ${candidate.studentCode ?? ""}`).includes(query)) return false
     if (values.level && candidate.previousGrade.educationLevelId !== values.level) return false
     if (values.grade && candidate.previousGrade.id !== values.grade) return false
     if (values.classification && candidate.previousClassificationId !== values.classification) return false
     return true
   })
-}
-
-function normalizeSearch(value: string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-MX").trim()
-}
-
-function EnrollmentSituationResults({
-  situation,
-  enrollments,
-  pendingCandidates,
-  pendingLoadError,
-}: {
-  situation: string
-  enrollments: EnrollmentListItem[]
-  pendingCandidates: BulkEnrollmentCandidate[]
-  pendingLoadError: boolean
-}) {
-  const total = enrollments.length + pendingCandidates.length
-  const pendingOnly = situation === "pending"
-
-  return (
-    <section aria-label="Matrículas del ciclo" className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        {pendingOnly
-          ? `${pendingCandidates.length} pendiente${pendingCandidates.length === 1 ? "" : "s"} de continuidad`
-          : `${total} resultado${total === 1 ? "" : "s"}`}
-      </p>
-
-      {pendingLoadError && pendingOnly ? (
-        <div className="border-y border-border bg-white px-4 py-10 text-center">
-          <p className="text-sm font-medium">No pudimos cargar los alumnos pendientes de continuidad.</p>
-          <p className="mt-1 text-sm text-muted-foreground">Actualiza la página e inténtalo de nuevo.</p>
-        </div>
-      ) : (
-        <>
-          {!pendingOnly && enrollments.length > 0 && <EnrollmentList enrollments={enrollments} />}
-          {pendingCandidates.length > 0 && (
-            <div className="space-y-3">
-              {!pendingOnly && <h2 className="text-sm font-medium">Pendientes de continuidad</h2>}
-              <PendingEnrollmentCandidatesList candidates={pendingCandidates} />
-            </div>
-          )}
-          {!enrollments.length && !pendingCandidates.length && !pendingLoadError && (
-            pendingOnly
-              ? <PendingEnrollmentCandidatesList candidates={[]} />
-              : <EnrollmentList enrollments={[]} />
-          )}
-        </>
-      )}
-    </section>
-  )
 }
 
 function Tab({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {

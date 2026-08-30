@@ -3,7 +3,7 @@
 import { Dialog } from "@base-ui/react/dialog"
 import { CheckCircle2, ChevronLeft, LoaderCircle, Plus, Search, X } from "lucide-react"
 import Link from "next/link"
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 
 import { createEnrollment, createNewStudentEnrollment, getEnrollmentFeeCoverage, getNewEnrollmentFinancialOptions, type CreateNewStudentEnrollmentResult } from "@/app/admin/matricula/actions"
 import { Button } from "@/components/ui/button"
@@ -96,6 +96,12 @@ export function NewEnrollmentSheet({
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [paymentCompleted, setPaymentCompleted] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    contentRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" })
+  }, [open, step])
 
   const selectedCycle = cycles.find((cycle) => cycle.id === cycleId) ?? null
   const selectedGrade = grades.find((grade) => grade.id === gradeLevelId) ?? null
@@ -405,7 +411,7 @@ export function NewEnrollmentSheet({
       <Dialog.Trigger render={<Button className={cn("h-10", triggerClassName)}><Plus /> {triggerLabel}</Button>} />
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/25" />
-        <Dialog.Popup className="fixed inset-0 z-50 flex flex-col bg-white outline-none sm:left-auto sm:w-[72vw] sm:border-l sm:border-border sm:shadow-xl md:w-[68vw] lg:w-1/2">
+        <Dialog.Popup className="fixed inset-0 z-50 flex min-w-0 flex-col overflow-hidden bg-white outline-none sm:left-auto sm:w-[72vw] sm:border-l sm:border-border sm:shadow-xl md:w-[68vw] lg:w-1/2">
           <header className="flex min-h-14 items-center justify-between border-b border-border px-4 sm:px-6">
             <div className="min-w-0">
               <Dialog.Title className="text-base font-semibold">Nueva matrícula</Dialog.Title>
@@ -416,7 +422,7 @@ export function NewEnrollmentSheet({
             </Dialog.Close>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6">
+          <div ref={contentRef} className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 py-5 sm:px-6">
             {step === "student" && (
               <section className="space-y-4">
                 <div>
