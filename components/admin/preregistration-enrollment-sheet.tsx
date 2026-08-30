@@ -2,7 +2,7 @@
 
 import { Dialog } from "@base-ui/react/dialog"
 import { CheckCircle2, ChevronLeft, LoaderCircle, UsersRound, X } from "lucide-react"
-import { useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 
 import { getEnrollmentFeeCoverage, resolvePreregistrationToEnrollment } from "@/app/admin/matricula/actions"
@@ -66,7 +66,13 @@ export function PreregistrationEnrollmentSheet({
   const [error, setError] = useState<string | null>(null)
   const [successId, setSuccessId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const contentRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
+
+  useEffect(() => {
+    if (!open) return
+    contentRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" })
+  }, [open, step])
 
   const targetCycle = cycles.find((cycle) => cycle.id === selected?.targetCycleId) ?? null
   const targetGrade = grades.find((grade) => grade.id === selected?.targetGradeLevelId) ?? null
@@ -196,9 +202,9 @@ export function PreregistrationEnrollmentSheet({
     <Dialog.Trigger disabled={!preregistrations.length && !loadError} render={<Button variant="outline" className="h-10"><UsersRound /> Preinscritos</Button>} />
     <Dialog.Portal>
       <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/25" />
-      <Dialog.Popup className="fixed inset-0 z-50 flex flex-col bg-white outline-none sm:left-auto sm:w-[72vw] sm:border-l sm:border-border sm:shadow-xl md:w-[68vw] lg:w-1/2">
+      <Dialog.Popup className="fixed inset-0 z-50 flex min-w-0 flex-col overflow-hidden bg-white outline-none sm:left-auto sm:w-[72vw] sm:border-l sm:border-border sm:shadow-xl md:w-[68vw] lg:w-1/2">
         <header className="flex min-h-14 items-center justify-between border-b border-border px-4 sm:px-6"><div className="min-w-0"><Dialog.Title className="text-base font-semibold">Preinscritos</Dialog.Title>{step !== "success" && <p className="mt-0.5 text-xs text-muted-foreground">{stepLabel(step)}</p>}</div><Dialog.Close aria-label="Cerrar preinscritos" className="flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"><X className="size-4" /></Dialog.Close></header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6">
+        <div ref={contentRef} className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 py-5 sm:px-6">
           {step === "list" && (loadError ? <LoadError /> : <PreregistrationList preregistrations={preregistrations} cycles={cycles} grades={grades} levels={levels} onSelect={selectPreregistration} />)}
           {step === "activation" && selected && <ActivationForm preregistration={selected} targetCycle={targetCycle} targetGrade={targetGrade} targetLevel={targetLevel} groups={availableGroups} classifications={classifications} groupId={groupId} setGroupId={setGroupId} classificationId={classificationId} setClassificationId={setClassificationId} activatedOn={activatedOn} setActivatedOn={setActivatedOn} classesStartOn={classesStartOn} setClassesStartOn={setClassesStartOn} economicStartOn={economicStartOn} setEconomicStartOn={setEconomicStartOn} showInitialPeriodDecision={showInitialPeriodDecision} initialPeriodDecision={initialPeriodDecision} setInitialPeriodDecision={setInitialPeriodDecision} firstOrdinaryPeriodStart={initialPeriodState.firstOrdinaryPeriodStart} initialPeriodChargeSelected={initialPeriodChargeSelected} needsInitialAmount={needsInitialAmount} initialPeriodAmount={initialPeriodAmount} setInitialPeriodAmount={setInitialPeriodAmount} initialPeriodDueDate={initialPeriodDueDate} setInitialPeriodDueDate={setInitialPeriodDueDate} feeCoverage={feeCoverage} enrollmentFeeMode={enrollmentFeeMode} setEnrollmentFeeMode={setEnrollmentFeeMode} enrollmentFeeAmount={enrollmentFeeAmount} setEnrollmentFeeAmount={setEnrollmentFeeAmount} discountCategoryId={discountCategoryId} setDiscountCategoryId={setDiscountCategoryId} discountCategories={discountCategories} reason={reason} setReason={setReason} />}
           {step === "review" && selected && <Review preregistration={selected} cycle={targetCycle} grade={targetGrade} level={targetLevel} group={selectedGroup} classification={selectedClassification} activatedOn={activatedOn} classesStartOn={classesStartOn} economicStartOn={economicStartForRpc} showInitialPeriodDecision={showInitialPeriodDecision} initialPeriodChargeSelected={initialPeriodChargeSelected} firstOrdinaryPeriodStart={initialPeriodState.firstOrdinaryPeriodStart} needsInitialAmount={needsInitialAmount} initialPeriodAmount={initialPeriodAmount} initialPeriodDueDate={initialPeriodDueDate} feeCoverage={feeCoverage} enrollmentFeeMode={enrollmentFeeMode} enrollmentFeeAmount={enrollmentFeeAmount} reason={reason} />}
