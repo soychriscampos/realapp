@@ -51,12 +51,13 @@ export async function saveNewPassword(
     return { error: 'No pudimos actualizar tu contraseña. Intenta de nuevo.' }
   }
 
+  cookieStore.delete(RECOVERY_COOKIE)
+
   const { error: signOutError } = await supabase.auth.signOut()
 
   if (signOutError) {
     return { error: 'No pudimos cerrar la sesión. Intenta de nuevo.' }
   }
 
-  cookieStore.delete(RECOVERY_COOKIE)
   redirect('/login?password_reset=1')
 }
