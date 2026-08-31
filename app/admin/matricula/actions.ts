@@ -35,7 +35,7 @@ export type CreateEnrollmentResult =
 export type CreateNewStudentEnrollmentInput = {
   studentFullName: string
   studentSex: "H" | "M"
-  studentBirthDate: string
+  studentBirthDate: string | null
   contacts: Array<{
     full_name: string
     relationship: string
@@ -323,10 +323,10 @@ export async function createNewStudentEnrollment(
 ): Promise<CreateNewStudentEnrollmentResult> {
   if (!input.studentFullName.trim()) return { ok: false, message: "Indica el nombre completo del alumno." }
   if (!/[HM]/.test(input.studentSex)) return { ok: false, message: "Selecciona el sexo del alumno." }
-  if (!isDate(input.studentBirthDate)) return { ok: false, message: "Captura una fecha de nacimiento válida." }
-  if (input.contacts.length < 1 || input.contacts.length > 2) return { ok: false, message: "Agrega uno o dos contactos válidos." }
+  if (input.studentBirthDate && !isDate(input.studentBirthDate)) return { ok: false, message: "Captura una fecha de nacimiento válida." }
+  if (input.contacts.length > 2) return { ok: false, message: "Agrega un máximo de dos contactos." }
   if (input.contacts.some((contact) => !contact.full_name.trim() || !contact.relationship.trim() || !contact.phone.trim())) {
-    return { ok: false, message: "Completa nombre, parentesco y teléfono del contacto principal." }
+    return { ok: false, message: "Completa nombre, parentesco y teléfono de cada contacto agregado." }
   }
 
   const validationMessage = validate({
@@ -351,7 +351,7 @@ export async function createNewStudentEnrollment(
   const { data, error } = await supabase.rpc("create_new_student_enrollment", {
     p_student_full_name: input.studentFullName.trim(),
     p_student_sex: input.studentSex,
-    p_student_birth_date: input.studentBirthDate,
+    p_student_birth_date: cleanText(input.studentBirthDate),
     p_contacts: input.contacts.map((contact) => ({
       full_name: contact.full_name.trim(),
       relationship: contact.relationship.trim(),
