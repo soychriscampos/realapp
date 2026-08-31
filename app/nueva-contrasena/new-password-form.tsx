@@ -1,16 +1,11 @@
 'use client'
 
 import { Eye, EyeOff, LoaderCircle } from 'lucide-react'
-import { useActionState, useState } from 'react'
-import { useFormStatus } from 'react-dom'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  initialNewPasswordState,
-  saveNewPassword,
-  type NewPasswordState,
-} from './actions'
+import { createClient } from '@/lib/supabase/client'
 
 const MINIMUM_PASSWORD_LENGTH = 6
 
@@ -57,39 +52,61 @@ function PasswordInput({
   )
 }
 
-function SavePasswordSubmit() {
-  const { pending } = useFormStatus()
-
-  return (
-    <Button type="submit" className="h-12 w-full" disabled={pending}>
-      {pending && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
-      {pending ? 'Guardando' : 'Guardar contraseña'}
-    </Button>
-  )
-}
-
 export function NewPasswordForm() {
-  const [state, formAction] = useActionState<NewPasswordState, FormData>(
-    saveNewPassword,
-    initialNewPasswordState
-  )
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
-  const [clientError, setClientError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [isPending, setIsPending] = useState(false)
 
-  function validate(event: React.FormEvent<HTMLFormElement>) {
-    setClientError(null)
+  async function savePassword(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError(null)
 
     if (password !== confirmation) {
-      event.preventDefault()
-      setClientError('Las contraseñas no coinciden.')
+      setError('Las contraseñas no coinciden.')
+      return
+    }
+
+    setIsPending(true)
+
+    try {
+      const supabase = createClient()
+      const { error: updateError } = await supabase.auth.updateUser({ password })
+
+      if (updateError) {
+        setError('No pudimos actualizar tu contraseña. Intenta de nuevo.')
+        return
+      }
+
+      const completionResponse = await fetch('/auth/recovery/complete', {
+        method: 'POST',
+      })
+
+      if (!completionResponse.ok) {
+        setError('No pudimos completar el restablecimiento. Intenta de nuevo.')
+        return
+      }
+
+      const { error: signOutError } = await supabase.auth.signOut()
+
+      if (signOutError) {
+        setError('No pudimos cerrar la sesión. Intenta de nuevo.')
+        return
+      }
+
+      // Se requiere una navegación completa para cerrar este flujo fuera de
+      // Server Actions y descartar el estado del router de recovery.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign('/login?password_reset=1')
+    } catch {
+      setError('No pudimos completar el restablecimiento. Intenta de nuevo.')
+    } finally {
+      setIsPending(false)
     }
   }
 
-  const error = clientError ?? state.error
-
   return (
-    <form action={formAction} onSubmit={validate} className="space-y-5">
+    <form onSubmit={savePassword} className="space-y-5">
       <PasswordInput
         id="password"
         label="Nueva contraseña"
@@ -113,7 +130,10 @@ export function NewPasswordForm() {
         </p>
       )}
 
-      <SavePasswordSubmit />
+      <Button type="submit" className="h-12 w-full" disabled={isPending}>
+        {isPending && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
+        {isPending ? 'Guardando' : 'Guardar contraseña'}
+      </Button>
     </form>
   )
 }
