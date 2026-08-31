@@ -113,7 +113,7 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
       !actionDiscountCategoriesResult.error
   )
   const studentContext = enrollment
-    ? `${enrollment.educationLevel.name} · ${enrollment.gradeLevel.name}${enrollment.group ? ` · ${getEnrollmentGroupLabel(enrollment.group)}` : ""}`
+      ? `${enrollment.educationLevel.name} · ${enrollment.gradeLevel.name}${enrollment.group ? ` ${getEnrollmentGroupLabel(enrollment.group)}` : ""}`
     : "Sin matrícula en el ciclo operativo"
 
   return (

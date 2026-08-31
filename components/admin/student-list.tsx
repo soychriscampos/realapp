@@ -59,7 +59,7 @@ function StudentMobileRow({ student }: { student: StudentListItem }) {
         <span className="block truncate text-sm font-medium">{student.fullName}</span>
         <span className="mt-1 block truncate text-sm text-muted-foreground">
           {student.enrollment
-            ? `${student.enrollment.educationLevel.name} · ${student.enrollment.gradeLevel.name}${student.enrollment.group ? ` · ${getEnrollmentGroupLabel(student.enrollment.group)}` : ""} · ${formatEnrollmentStatus(student.enrollment.status)}`
+            ? `${student.enrollment.educationLevel.name} · ${student.enrollment.gradeLevel.name}${student.enrollment.group ? ` ${getEnrollmentGroupLabel(student.enrollment.group)}` : ""} · ${formatEnrollmentStatus(student.enrollment.status)}`
             : "Sin matrícula en el ciclo operativo"}
         </span>
       </span>

@@ -54,8 +54,10 @@ export type StudentDetail = {
 export type StudentSearchResult = {
   id: string
   fullName: string
+  levelName: string | null
   gradeName: string | null
   groupName: string | null
+  groupCode: string | null
   status: string
   gradeLevelId: string | null
   groupId: string | null
@@ -220,7 +222,7 @@ export async function searchStudents(
   cycleId?: string
 ): Promise<{ data: StudentSearchResult[]; error: boolean }> {
   const enrollmentSelection = cycleId
-    ? ", enrollments(id, status, cycle_id, enrolled_on, grade_level_id, group_id, classification_id, grade_levels(name), groups(name))"
+    ? ", enrollments(id, status, cycle_id, enrolled_on, grade_level_id, group_id, classification_id, grade_levels(name, education_levels(name)), groups(name, code))"
     : ""
   const selection: string = `id, full_name${enrollmentSelection}`
 
@@ -243,13 +245,16 @@ export async function searchStudents(
     data: (rows ?? []).map((row) => {
       const enrollment = asRecords(row.enrollments)[0]
       const grade = asRecord(enrollment?.grade_levels)
+      const level = asRecord(grade?.education_levels)
       const group = asRecord(enrollment?.groups)
 
       return {
         id: asText(row.id),
         fullName: asText(row.full_name),
+        levelName: level ? asText(level.name) : null,
         gradeName: grade ? asText(grade.name) : null,
         groupName: group ? asText(group.name) : null,
+        groupCode: group ? asText(group.code) : null,
         status: enrollment ? asText(enrollment.status) : "",
         gradeLevelId: enrollment ? asText(enrollment.grade_level_id) || null : null,
         groupId: enrollment ? asText(enrollment.group_id) || null : null,

@@ -8,6 +8,7 @@ import { getStudentAccount, getStudentPaymentDetails } from "@/lib/admin/student
 import { getPaymentFormContext } from "@/lib/admin/payments"
 import { getStudentEmailRecipients } from "@/lib/email/recipients"
 import { getStudentCatalogs, getStudentDetail } from "@/lib/admin/students"
+import { getEnrollmentGroupLabel } from "@/lib/admin/enrollments"
 import { requireRole } from "@/lib/auth/require-role"
 
 type StudentAccountPageProps = {
@@ -48,7 +49,7 @@ export default async function StudentAccountPage({ params, searchParams }: Stude
     .map((movement) => movement.id)
   const paymentDetailsResult = await getStudentPaymentDetails(supabase, student.id, paymentIds)
   const schoolContext = student.enrollment
-    ? `${student.enrollment.gradeLevel.name}${student.enrollment.group ? ` · ${student.enrollment.group.name}` : ""}`
+    ? `${student.enrollment.educationLevel.name} · ${student.enrollment.gradeLevel.name}${student.enrollment.group ? ` ${getEnrollmentGroupLabel(student.enrollment.group)}` : ""}`
     : "Sin matrícula en el ciclo operativo"
 
   return (

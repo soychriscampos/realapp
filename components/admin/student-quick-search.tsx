@@ -2,7 +2,7 @@
 
 import { ChevronRight, Search } from "lucide-react"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { Input } from "@/components/ui/input"
 import { searchStudents, type StudentSearchResult } from "@/lib/admin/students"
@@ -22,6 +22,17 @@ export function StudentQuickSearch({
   const [state, setState] = useState<"idle" | "loading" | "error" | "empty">(
     "idle"
   )
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function closeOnOutsideClick(event: PointerEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) setIsOpen(false)
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsideClick)
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick)
+  }, [])
 
   useEffect(() => {
     const value = query.trim()
@@ -49,15 +60,17 @@ export function StudentQuickSearch({
   }, [cycleId, query])
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <Search className={`pointer-events-none absolute left-3 ${compact ? "top-1/2 size-4" : "top-6 size-5"} -translate-y-1/2 text-muted-foreground`} />
       <Input
         data-search-target={focusTarget}
         value={query}
+        onFocus={() => { if (query.trim().length >= 2) setIsOpen(true) }}
         onChange={(event) => {
           setQuery(event.target.value)
           setResults([])
           setState("idle")
+          setIsOpen(event.target.value.trim().length >= 2)
         }}
         placeholder="Nombre del alumno..."
         aria-label="Nombre del alumno"
@@ -71,7 +84,7 @@ export function StudentQuickSearch({
         {state === "error" ? "No pudimos buscar alumnos" : null}
       </div>
 
-      {(state !== "idle" || results.length > 0) && query.trim().length >= 2 && (
+      {isOpen && (state !== "idle" || results.length > 0) && query.trim().length >= 2 && (
         <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-border bg-white shadow-lg">
           {state === "loading" && (
             <div className="space-y-3 px-4 py-4" aria-hidden="true">
@@ -96,6 +109,7 @@ export function StudentQuickSearch({
             <Link
               key={result.id}
               href={`/admin/alumnos/${result.id}`}
+              onClick={() => setIsOpen(false)}
               className="flex min-h-[68px] items-center justify-between gap-4 border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             >
               <span className="min-w-0">
@@ -104,7 +118,7 @@ export function StudentQuickSearch({
                 </span>
                 <span className="mt-1 block truncate text-sm text-muted-foreground">
                   {result.gradeName
-                    ? `${result.gradeName}${result.groupName ? ` · ${result.groupName}` : ""}${result.status ? ` · ${formatEnrollmentStatus(result.status)}` : ""}`
+                    ? `${result.levelName ?? "Sin nivel"} · ${result.gradeName}${result.groupCode ? ` ${result.groupCode}` : result.groupName ? ` ${result.groupName}` : ""}${result.status ? ` · ${formatEnrollmentStatus(result.status)}` : ""}`
                     : cycleId
                       ? "Sin matrícula en el ciclo operativo"
                       : "Abrir ficha del alumno"}
@@ -116,6 +130,7 @@ export function StudentQuickSearch({
 
           <Link
             href={`/admin/alumnos?query=${encodeURIComponent(query.trim())}`}
+            onClick={() => setIsOpen(false)}
             className="flex min-h-11 items-center px-4 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
             Ver todos los resultados
