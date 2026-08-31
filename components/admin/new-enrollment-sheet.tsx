@@ -373,7 +373,7 @@ export function NewEnrollmentSheet({
     setStudentFullName("")
     setStudentSex("H")
     setStudentBirthDate("")
-    setContacts([{ full_name: "", relationship: "", phone: "", email: "" }])
+    setContacts([])
     setContactOtherRelationships({})
     setEducationLevelId("")
     setGradeLevelId("")
@@ -443,7 +443,7 @@ export function NewEnrollmentSheet({
                 ) : (
                   <>
                     <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={studentQuery} onChange={(event) => { setStudentQuery(event.target.value); setStudentResults([]); setStudentSearchState("idle"); setError(null) }} placeholder="Buscar por nombre..." className="h-11 bg-white pl-10" /></div>
-                    <StudentResults results={studentResults} state={studentSearchState} grades={grades} levels={levels} onSelect={(result) => { const nextGradeLevelId = result.gradeLevelId ? nextGradeId(result.gradeLevelId, grades, levels) : ""; const nextGrade = grades.find((grade) => grade.id === nextGradeLevelId); setStudent(result); setStudentResults([]); setStudentQuery(result.fullName); setEducationLevelId(nextGrade?.education_level_id ?? ""); setGradeLevelId(nextGradeLevelId); setGroupId(nextGradeLevelId ? defaultGroupId(groups, cycleId, nextGradeLevelId) : ""); setClassificationId(result.classificationId && classifications.some((classification) => classification.id === result.classificationId) ? result.classificationId : ""); setEnrollmentFeeCoverage("idle") }} />
+                    <StudentResults query={studentQuery} results={studentResults} state={studentSearchState} grades={grades} levels={levels} onSelect={(result) => { const nextGradeLevelId = result.gradeLevelId ? nextGradeId(result.gradeLevelId, grades, levels) : ""; const nextGrade = grades.find((grade) => grade.id === nextGradeLevelId); setStudent(result); setStudentResults([]); setStudentQuery(result.fullName); setEducationLevelId(nextGrade?.education_level_id ?? ""); setGradeLevelId(nextGradeLevelId); setGroupId(nextGradeLevelId ? defaultGroupId(groups, cycleId, nextGradeLevelId) : ""); setClassificationId(result.classificationId && classifications.some((classification) => classification.id === result.classificationId) ? result.classificationId : ""); setEnrollmentFeeCoverage("idle") }} />
                   </>
                 )}
               </section>
@@ -488,10 +488,11 @@ export function NewEnrollmentSheet({
   )
 }
 
-function StudentResults({ results, state, grades, levels, onSelect }: { results: StudentSearchResult[]; state: "idle" | "loading" | "error" | "empty"; grades: Grade[]; levels: Level[]; onSelect: (result: StudentSearchResult) => void }) {
+function StudentResults({ query, results, state, grades, levels, onSelect }: { query: string; results: StudentSearchResult[]; state: "idle" | "loading" | "error" | "empty"; grades: Grade[]; levels: Level[]; onSelect: (result: StudentSearchResult) => void }) {
+  if (!query.trim()) return null
   if (state === "loading") return <div className="rounded-lg border border-border px-4 py-4 text-sm text-muted-foreground">Buscando alumnos...</div>
   if (state === "error") return <div className="rounded-lg border border-border px-4 py-4 text-sm text-muted-foreground">No pudimos buscar alumnos. Inténtalo de nuevo.</div>
-  if (state === "empty") return <div className="rounded-lg border border-border px-4 py-4 text-sm text-muted-foreground">No encontramos alumnos con ese nombre.</div>
+  if (state === "empty") return <p className="pt-1 text-sm text-muted-foreground">No encontramos alumnos con ese nombre.</p>
   if (!results.length) return null
   return <div className="overflow-hidden rounded-lg border border-border">{results.map((result) => { const grade = grades.find((item) => item.id === result.gradeLevelId); const level = levels.find((item) => item.id === grade?.education_level_id); const destination = result.groupName ?? grade?.name ?? result.gradeName; return <button key={result.id} type="button" onClick={() => onSelect(result)} className="flex min-h-14 w-full items-center border-b border-border px-4 text-left text-sm last:border-b-0 hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"><span><span className="block font-medium">{result.fullName}</span>{(level || destination) && <span className="mt-1 block text-xs text-muted-foreground">{level?.name ?? ""}{level && destination ? " · " : ""}{destination ?? ""}</span>}</span></button> })}</div>
 }
