@@ -2,7 +2,17 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
-  if (request.nextUrl.pathname === '/onboarding/staff') {
+  const { pathname } = request.nextUrl
+  const isPublicAuthRoute =
+    pathname === '/onboarding/staff' ||
+    pathname === '/recuperar-contrasena' ||
+    pathname === '/nueva-contrasena' ||
+    pathname === '/auth/recovery/callback'
+
+  // Estas rutas públicas no deben intentar refrescar cookies de Auth. En
+  // particular, el callback crea su propia sesión y las pantallas públicas
+  // siguen siendo accesibles aun con cookies inválidas o vencidas.
+  if (isPublicAuthRoute) {
     return NextResponse.next()
   }
 

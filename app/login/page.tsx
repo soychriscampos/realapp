@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHomeRoute } from '@/lib/auth/home-route'
 import { login } from './actions'
@@ -12,6 +13,7 @@ import { LoginSubmit } from './login-submit'
 type LoginPageProps = {
   searchParams: Promise<{
     error?: string
+    password_reset?: string
   }>
 }
 
@@ -31,7 +33,7 @@ export default async function LoginPage({
     }
   }
 
-  const { error } = await searchParams
+  const { error, password_reset: passwordReset } = await searchParams
 
   const errorMessage =
     error === 'invalid'
@@ -93,10 +95,21 @@ export default async function LoginPage({
             </p>
           )}
 
+          {passwordReset === '1' && (
+            <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
+              Tu contraseña fue actualizada. Ya puedes iniciar sesión.
+            </p>
+          )}
+
           <LoginSubmit />
 
-          <p className="text-center text-sm text-muted-foreground">
-            ¿Olvidaste tu contraseña?
+          <p className="text-center text-sm">
+            <Link
+              href="/recuperar-contrasena"
+              className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
           </p>
         </form>
       </div>
