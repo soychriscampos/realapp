@@ -29,6 +29,18 @@ export default async function ReportsPage() {
           </span>
           <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
         </Link>
+        <Link
+          href="/admin/reportes/valor-matricula"
+          className="flex min-h-20 items-center justify-between gap-4 px-4 py-4 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <span>
+            <span className="block text-sm font-semibold">Valor de matrícula</span>
+            <span className="mt-1 block text-sm text-muted-foreground">
+              Consulta el valor mensual contractual y los beneficios por ciclo.
+            </span>
+          </span>
+          <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+        </Link>
         {isMaster && (
           <Link
             href="/admin/reportes/financieros"

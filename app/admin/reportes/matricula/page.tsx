@@ -37,10 +37,16 @@ type EnrollmentAsOfRow = {
   history_quality: unknown
 }
 
+type EnrollmentStatusRow = {
+  id: unknown
+  status: unknown
+}
+
 type DistributionRow = {
   label: string
   men: number
   women: number
+  unspecified: number
   total: number
   sortValue: number
 }
@@ -73,16 +79,33 @@ export default async function EnrollmentReportPage({ searchParams }: EnrollmentR
   if (reportResult.error) return <ReportLoadError />
 
   const rows = (reportResult.data as EnrollmentAsOfRow[] | null) ?? []
-  const campusRows = rows.filter((row) => row.counts_for_campus === true)
-  const sepRows = rows.filter((row) => row.counts_for_sep === true)
+  const currentStatusResult = await supabase
+    .from("enrollments")
+    .select("id, status")
+    .eq("cycle_id", selectedCycle.id)
+  if (currentStatusResult.error) return <ReportLoadError />
+
+  const currentStatusByEnrollment = new Map(
+    ((currentStatusResult.data as EnrollmentStatusRow[] | null) ?? [])
+      .map((row) => [text(row.id), text(row.status)] as const)
+  )
+  const currentRows = rows.map((row) => ({
+    ...row,
+    status: currentStatusByEnrollment.get(text(row.enrollment_id)) ?? row.status,
+  }))
+  const activeRows = currentRows.filter((row) => row.status === "ACTIVA")
+  const campusRows = activeRows.filter((row) => row.counts_for_campus === true)
+  const sepRows = activeRows.filter((row) => row.counts_for_sep === true)
+  const campusStatusRows = currentRows.filter((row) => row.counts_for_campus === true)
   const levelOrder = new Map(catalogs.levels.map((level) => [level.id, level.sort_order]))
   const gradeOrder = new Map(catalogs.grades.map((grade) => [grade.id, grade.sort_order]))
   const reportRows = scope === "sep" ? sepRows : campusRows
   const levelDistribution = distributionByLevel(reportRows, levelOrder)
   const gradeDistribution = distributionByGrade(reportRows, levelOrder, gradeOrder)
-  const classifications = classificationDistribution(rows)
+  const classifications = classificationDistribution(campusRows)
+  const statusDistributions = statusDistribution(campusStatusRows)
   const evolution = scope === "campus"
-    ? await getEnrollmentEvolution(supabase, selectedCycle.id, selectedCycle.starts_on, selectedCycle.ends_on, selectedCycle.status, mazatlanDate())
+    ? await getEnrollmentEvolution(supabase, selectedCycle.id, selectedCycle.starts_on, selectedCycle.ends_on, selectedCycle.status, mazatlanDate(), campusRows.length)
     : []
 
   return (
@@ -133,7 +156,7 @@ export default async function EnrollmentReportPage({ searchParams }: EnrollmentR
       </header>
 
       <section aria-label="Indicadores de matrícula" className="grid border-y border-border sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label={scope === "sep" ? "Matrícula SEP" : "Matrícula campus"} value={String(reportRows.length)} />
+        <Metric label={scope === "sep" ? "Matrícula SEP" : "Matrícula activa"} value={String(reportRows.length)} />
         <Metric label={scope === "sep" ? "Preescolar SEP" : "Matrícula SEP"} value={String(scope === "sep" ? countCampusByLevel(sepRows, "preescolar") : sepRows.length)} />
         <Metric label={scope === "sep" ? "Primaria SEP" : "Preescolar"} value={String(scope === "sep" ? countCampusByLevel(sepRows, "primaria") : countCampusByLevel(campusRows, "preescolar"))} />
         <Metric label={scope === "sep" ? "Fuera de SEP" : "Primaria"} value={String(scope === "sep" ? campusRows.filter((row) => row.counts_for_sep !== true).length : countCampusByLevel(campusRows, "primaria"))} />
@@ -147,7 +170,7 @@ export default async function EnrollmentReportPage({ searchParams }: EnrollmentR
         <div className="space-y-7">
           <ReportTable title={scope === "sep" ? "Distribución SEP por nivel y sexo" : "Distribución por nivel"} rows={levelDistribution} />
           <ReportTable title={scope === "sep" ? "Distribución SEP por grado" : "Distribución por grado"} rows={gradeDistribution} />
-          {scope === "campus" ? <ClassificationSection rows={classifications} /> : <OutsideSepSection rows={campusRows.filter((row) => row.counts_for_sep !== true)} />}
+          {scope === "campus" ? <><ClassificationSection rows={classifications} /><StatusSection rows={statusDistributions} /></> : <OutsideSepSection rows={campusRows.filter((row) => row.counts_for_sep !== true)} />}
         </div>
       )}
     </div>
@@ -162,7 +185,8 @@ async function getEnrollmentEvolution(
   startsOn: string,
   endsOn: string,
   status: string,
-  today: string
+  today: string,
+  currentActiveCount: number
 ): Promise<EvolutionPoint[]> {
   const lastDate = status === "ACTIVE" || status === "PREPARATION"
     ? (endsOn < today ? endsOn : today)
@@ -177,9 +201,11 @@ async function getEnrollmentEvolution(
   return results.map((result, index) => ({
     date: cutDates[index],
     label: formatMonth(cutDates[index]),
-    count: result.error
-      ? 0
-      : ((result.data as EnrollmentAsOfRow[] | null) ?? []).filter((row) => row.counts_for_campus === true).length,
+    count: index === results.length - 1
+      ? currentActiveCount
+      : result.error
+        ? 0
+        : ((result.data as EnrollmentAsOfRow[] | null) ?? []).filter((row) => row.status === "ACTIVA" && row.counts_for_campus === true).length,
   }))
 }
 
@@ -229,10 +255,10 @@ function EnrollmentEvolution({ points }: { points: EvolutionPoint[] }) {
 function EvolutionChart({ points }: { points: EvolutionPoint[] }) {
   const width = 720
   const height = 240
-  const left = 42
+  const left = 58
   const right = 16
   const top = 18
-  const bottom = 38
+  const bottom = 52
   const max = Math.max(...points.map((point) => point.count), 1)
   const x = (index: number) => left + (index * (width - left - right)) / Math.max(points.length - 1, 1)
   const y = (count: number) => top + (height - top - bottom) * (1 - count / max)
@@ -246,13 +272,14 @@ function EvolutionChart({ points }: { points: EvolutionPoint[] }) {
           <desc id="evolution-chart-description">Cantidad de alumnos en cada corte mensual del ciclo.</desc>
           <line x1={left} x2={left} y1={top} y2={height - bottom} stroke="currentColor" className="text-border" />
           <line x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} stroke="currentColor" className="text-border" />
+          <text x="16" y={height / 2} textAnchor="middle" transform={`rotate(-90 16 ${height / 2})`} className="fill-muted-foreground text-[11px]">Alumnos</text>
           <text x={left - 8} y={top + 4} textAnchor="end" className="fill-muted-foreground text-[11px]">{max}</text>
           <text x={left - 8} y={height - bottom + 4} textAnchor="end" className="fill-muted-foreground text-[11px]">0</text>
           <polyline points={line} fill="none" stroke="currentColor" strokeWidth="2.5" className="text-foreground" />
           {points.map((point, index) => (
             <g key={point.date}>
               <circle cx={x(index)} cy={y(point.count)} r="4" fill="currentColor" className="text-foreground" />
-              <text x={x(index)} y={height - 14} textAnchor="middle" className="fill-muted-foreground text-[11px]">{point.label}</text>
+              <text x={x(index)} y={height - 12} textAnchor="middle" className="fill-muted-foreground text-[11px]">{point.label}</text>
             </g>
           ))}
         </svg>
@@ -279,9 +306,10 @@ function ReportTable({ title, rows }: { title: string; rows: DistributionRow[] }
             {rows.map((row) => (
               <article key={row.label} className="px-4 py-4">
                 <p className="text-sm font-medium">{row.label}</p>
-                <dl className="mt-3 grid grid-cols-3 gap-3 text-sm">
+                <dl className="mt-3 grid grid-cols-4 gap-3 text-sm">
                   <ReportMetric label="Hombres" value={row.men} />
                   <ReportMetric label="Mujeres" value={row.women} />
+                  <ReportMetric label="Sin sexo" value={row.unspecified} />
                   <ReportMetric label="Total" value={row.total} emphasis />
                 </dl>
               </article>
@@ -294,6 +322,7 @@ function ReportTable({ title, rows }: { title: string; rows: DistributionRow[] }
                 <th className="px-4 py-3">{title === "Distribución por nivel" ? "Nivel" : "Grado"}</th>
                 <th className="px-4 py-3 text-right">Hombres</th>
                 <th className="px-4 py-3 text-right">Mujeres</th>
+                <th className="px-4 py-3 text-right">Sin sexo</th>
                 <th className="px-4 py-3 text-right">Total</th>
               </tr>
             </thead>
@@ -303,6 +332,7 @@ function ReportTable({ title, rows }: { title: string; rows: DistributionRow[] }
                   <td className="px-4 py-3 font-medium">{row.label}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{row.men}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{row.women}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{row.unspecified}</td>
                   <td className="px-4 py-3 text-right font-medium tabular-nums">{row.total}</td>
                 </tr>
               ))}
@@ -406,7 +436,7 @@ function distributionByLevel(rows: EnrollmentAsOfRow[], levelOrder: Map<string, 
   for (const row of rows) {
     const levelId = text(row.education_level_id)
     const label = text(row.education_level_name) || "Sin nivel"
-    const current = groups.get(levelId || label) ?? { label, men: 0, women: 0, total: 0, sortValue: levelOrder.get(levelId) ?? Number.MAX_SAFE_INTEGER }
+    const current = groups.get(levelId || label) ?? { label, men: 0, women: 0, unspecified: 0, total: 0, sortValue: levelOrder.get(levelId) ?? Number.MAX_SAFE_INTEGER }
     addSex(current, row.sex)
     groups.set(levelId || label, current)
   }
@@ -429,6 +459,7 @@ function distributionByGrade(
       label: `${grade} ${level}`,
       men: 0,
       women: 0,
+      unspecified: 0,
       total: 0,
       sortValue: ((levelOrder.get(levelId) ?? 99) * 100) + (gradeOrder.get(gradeId) ?? 99),
     }
@@ -451,10 +482,56 @@ function classificationDistribution(rows: EnrollmentAsOfRow[]) {
   return [...groups.values()].sort((left, right) => right.campus - left.campus || left.label.localeCompare(right.label, "es"))
 }
 
+type StatusDistributionRow = {
+  status: string
+  label: string
+  total: number
+  byLevel: DistributionRow[]
+}
+
+const separatedStatuses = [
+  ["BAJA", "Bajas"],
+  ["NO_CONTINUA", "No continúan"],
+  ["FINALIZADA", "Finalizados"],
+  ["EGRESADA", "Egresados"],
+] as const
+
+function statusDistribution(rows: EnrollmentAsOfRow[]): StatusDistributionRow[] {
+  return separatedStatuses.flatMap(([status, label]) => {
+    const statusRows = rows.filter((row) => row.status === status)
+    return statusRows.length ? [{ status, label, total: statusRows.length, byLevel: distributionByLevel(statusRows, new Map()) }] : []
+  })
+}
+
+function StatusSection({ rows }: { rows: StatusDistributionRow[] }) {
+  return (
+    <section className="space-y-3" aria-labelledby="enrollment-status-title">
+      <div>
+        <h2 id="enrollment-status-title" className="text-base font-semibold">Movimientos y estatus</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Estos estados se muestran aparte y no forman parte de la matrícula activa.</p>
+      </div>
+      <div className="divide-y divide-border border-y border-border bg-white">
+        {rows.length ? rows.map((row) => (
+          <div key={row.status} className="space-y-3 px-4 py-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-sm font-medium">{row.label}</p>
+              <p className="text-lg font-semibold tabular-nums">{row.total}</p>
+            </div>
+            <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+              {row.byLevel.map((level) => <span key={level.label}>{level.label}: <strong className="font-medium text-foreground">{level.total}</strong></span>)}
+            </div>
+          </div>
+        )) : <p className="py-5 text-sm text-muted-foreground">No hay bajas, no continuidades, finalizaciones ni egresos registrados.</p>}
+      </div>
+    </section>
+  )
+}
+
 function addSex(row: DistributionRow, sex: unknown) {
   row.total += 1
   if (sex === "H") row.men += 1
-  if (sex === "M") row.women += 1
+  else if (sex === "M") row.women += 1
+  else row.unspecified += 1
 }
 
 function countCampusByLevel(rows: EnrollmentAsOfRow[], levelName: string) {
