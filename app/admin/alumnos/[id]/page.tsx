@@ -8,6 +8,7 @@ import { AddGuardianSheet, EditGuardianSheet } from "@/components/admin/edit-gua
 import { EditStudentBasicsSheet } from "@/components/admin/edit-student-basics-sheet"
 import { AccountSummary } from "@/components/admin/student-account"
 import { RegisterPaymentSheet } from "@/components/admin/register-payment-sheet"
+import { EditEnrollmentFeeSheet } from "@/components/admin/edit-enrollment-fee-sheet"
 import { StudentAccountView } from "@/components/admin/student-account-view"
 import {
   getStudentAccount,
@@ -95,6 +96,19 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
   const actionEnrollment = selectedEnrollment
   const enrollment = currentEnrollment ?? student.enrollment
   const actionCycleId = actionEnrollment?.cycleId ?? operationalCycleId
+  const enrollmentFeeChargeResult = actionEnrollment
+    ? await supabase
+      .from("charges")
+      .select("id, original_amount, financial_concepts!inner(code), charge_adjustments(amount)")
+      .eq("enrollment_id", actionEnrollment.id)
+      .eq("financial_concepts.code", "ENROLLMENT_FEE")
+      .eq("status", "ACTIVE")
+      .limit(1)
+    : { data: [], error: null }
+  const enrollmentFeeCharge = enrollmentFeeChargeResult.data?.[0]
+  const enrollmentFeeAmount = enrollmentFeeCharge
+    ? Number(enrollmentFeeCharge.original_amount) + ((enrollmentFeeCharge.charge_adjustments as Array<{ amount: number | string }> | null) ?? []).reduce((sum, adjustment) => sum + Number(adjustment.amount), 0)
+    : null
   const [actionPlansResult, actionFinancialCoverageResult, actionDiscountCategoriesResult, actionGroupsResult] = await Promise.all([
     actionCycleId ? getTenPaymentPlans(supabase) : Promise.resolve({ data: [], error: false }),
     actionCycleId ? getEnrollmentFinancialCoverage(supabase) : Promise.resolve({ data: [], error: false }),
@@ -336,7 +350,9 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
                 label="Inicio financiero"
                 value={actionEnrollment.economicStartOn ? formatDate(actionEnrollment.economicStartOn) : "Sin fecha registrada"}
               />
+              <Detail label="Inscripción" value={enrollmentFeeAmount === null ? "Sin cargo" : formatCurrency(enrollmentFeeAmount)} />
             </dl>
+            <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4"><EditEnrollmentFeeSheet enrollmentId={actionEnrollment.id} chargeId={enrollmentFeeCharge?.id ?? null} amount={enrollmentFeeAmount} dueDate={actionEnrollment.enrolledOn} /></div>
             {financialActionsAvailable && (
               <EnrollmentActions
                 section="financial"

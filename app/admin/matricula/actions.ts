@@ -32,6 +32,19 @@ export type CreateEnrollmentResult =
   | { ok: true; enrollmentId: string }
   | { ok: false; message: string; stage?: "enrollment" | "agreement" | "financials" | "activation" }
 
+export async function adjustEnrollmentFee(input: { enrollmentId: string; chargeId: string | null; targetAmount: string; dueDate: string; reason: string }): Promise<{ ok: true } | { ok: false; message: string }> {
+  const amount = Number(input.targetAmount)
+  if (!input.enrollmentId || !Number.isFinite(amount) || amount < 0) return { ok: false, message: "Captura un monto válido para la inscripción." }
+  if (!input.reason.trim()) return { ok: false, message: "Indica el motivo de la corrección." }
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { error } = input.chargeId
+    ? await supabase.rpc("adjust_charge", { p_charge_id: input.chargeId, p_target_amount: amount, p_adjustment_type: "CORRECTION", p_reason: input.reason.trim() })
+    : await supabase.rpc("create_enrollment_fee_charge", { p_enrollment_id: input.enrollmentId, p_amount: amount, p_due_date: input.dueDate, p_reason: input.reason.trim() })
+  if (error) return { ok: false, message: "No pudimos corregir el monto de inscripción. Verifica que el nuevo monto no sea menor a lo ya pagado." }
+  revalidatePath("/admin/alumnos", "layout")
+  return { ok: true }
+}
+
 export type CreateNewStudentEnrollmentInput = {
   studentFullName: string
   studentSex: "H" | "M"
