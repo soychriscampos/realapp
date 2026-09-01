@@ -13,6 +13,7 @@ export type StudentChargeBalance = {
   cycleCode: string
   conceptCode: string
   conceptName: string
+  origin: string
   coverageYear: number | null
   coverageMonth: number | null
   dueDate: string
@@ -60,6 +61,15 @@ export function isChargeEligibleForPaymentProposal(charge: StudentChargeBalance,
   return isChargeVisibleInCycle(charge, today) && Number(charge.outstandingAmount) > 0
 }
 
+// Payment allocation may target known future tuition charges. Keep the
+// calendar visibility rule for account presentation and other consumers.
+export function isChargeEligibleForPaymentAllocation(charge: StudentChargeBalance) {
+  if (charge.conceptCode === "TUITION") {
+    return charge.origin === "FINANCIAL_PLAN" && Number(charge.outstandingAmount) > 0
+  }
+  return isChargeEligibleForPaymentProposal(charge)
+}
+
 export type StudentPaymentDetail = {
   id: string
   amount: string
@@ -92,6 +102,7 @@ type ChargeBalanceRow = {
   cycle_code: unknown
   concept_code: unknown
   concept_name: unknown
+  origin: unknown
   coverage_year: unknown
   coverage_month: unknown
   due_date: unknown
@@ -303,6 +314,7 @@ function mapCharge(row: ChargeBalanceRow): StudentChargeBalance {
     cycleCode: text(row.cycle_code),
     conceptCode: text(row.concept_code),
     conceptName: text(row.concept_name),
+    origin: text(row.origin),
     coverageYear: numberOrNull(row.coverage_year),
     coverageMonth: numberOrNull(row.coverage_month),
     dueDate: text(row.due_date),

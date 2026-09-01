@@ -29,7 +29,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
   formatCurrency,
-  isChargeEligibleForPaymentProposal,
+  isChargeEligibleForPaymentAllocation,
   type StudentChargeBalance,
 } from "@/lib/admin/student-account"
 import type {
@@ -109,7 +109,7 @@ export function RegisterPaymentSheet({
   const pendingCharges = useMemo(
     () =>
       charges
-        .filter((charge) => isChargeEligibleForPaymentProposal(charge))
+        .filter((charge) => isChargeEligibleForPaymentAllocation(charge))
         .sort(compareCharges),
     [charges]
   )
@@ -117,6 +117,14 @@ export function RegisterPaymentSheet({
   const proposal = useMemo(
     () => buildSuggestedAllocations(pendingCharges, amountCents ?? 0),
     [pendingCharges, amountCents]
+  )
+  const displayedAllocationCharges = useMemo(
+    () => pendingCharges.filter((charge) => {
+      const currentCents = userAmountToCents(allocations[charge.id] ?? "") ?? 0
+      const proposedCents = userAmountToCents(proposal[charge.id] ?? "") ?? 0
+      return currentCents > 0 || currentCents !== proposedCents
+    }),
+    [allocations, pendingCharges, proposal]
   )
   const proposalChanged = !sameAllocations(allocations, proposal, pendingCharges)
   const selectedMethod = methods.find((method) => method.id === methodId) ?? null
@@ -343,6 +351,7 @@ export function RegisterPaymentSheet({
                 canReceiveForOthers={canReceiveForOthers}
                 selectedMethod={selectedMethod}
                 pendingCharges={pendingCharges}
+                displayedAllocationCharges={displayedAllocationCharges}
                 allocations={allocations}
                 proposalChanged={proposalChanged}
                 overrideReason={overrideReason}
@@ -465,6 +474,7 @@ type PaymentFormProps = {
   canReceiveForOthers: boolean
   selectedMethod: PaymentMethodOption | null
   pendingCharges: StudentChargeBalance[]
+  displayedAllocationCharges: StudentChargeBalance[]
   allocations: AllocationValues
   proposalChanged: boolean
   overrideReason: string
@@ -532,9 +542,9 @@ function PaymentForm(props: PaymentFormProps) {
           <h3 id="payment-allocation" className="text-sm font-semibold">Distribución</h3>
           <p className="mt-1 text-sm text-muted-foreground">Propuesta basada en los saldos pendientes más antiguos.</p>
         </div>
-        {props.pendingCharges.length ? (
+        {props.displayedAllocationCharges.length ? (
           <div className="divide-y divide-border border-y border-border">
-            {props.pendingCharges.map((charge) => (
+            {props.displayedAllocationCharges.map((charge) => (
               <div key={charge.id} className="grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_9rem] sm:items-center">
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{chargeLabel(charge)}</p>
@@ -550,6 +560,8 @@ function PaymentForm(props: PaymentFormProps) {
               </div>
             ))}
           </div>
+        ) : props.pendingCharges.length ? (
+          <p className="border-y border-border py-4 text-sm text-muted-foreground">Captura un monto para mostrar la distribución propuesta.</p>
         ) : (
           <p className="border-y border-border py-4 text-sm text-muted-foreground">No hay cargos pendientes. El pago completo se registrará como saldo a favor.</p>
         )}
