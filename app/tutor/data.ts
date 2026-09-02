@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { getStudentAccount, getStudentAccountSummary, getStudentPaymentDetails, type StudentAccount, type StudentPaymentDetail } from "@/lib/admin/student-account"
+import { getStudentAccount, getStudentAccountSummary, type StudentAccount, type StudentAccountMovement } from "@/lib/admin/student-account"
 
 export type TutorStudent = {
   id: string
@@ -61,17 +61,46 @@ export async function getTutorStudentContacts(supabase: SupabaseClient, studentI
   return { contacts: data ?? [], error: Boolean(error) }
 }
 
-export type TutorAccount = StudentAccount & { payments: StudentPaymentDetail[] }
+export type TutorPayment = {
+  id: string
+  amount: string
+  receivedAt: string
+  methodName: string
+  receivedByName: string
+}
+
+export type TutorAccount = StudentAccount & { payments: TutorPayment[] }
 
 export async function getTutorAccount(supabase: SupabaseClient, studentId: string): Promise<{ account: TutorAccount | null; error: boolean }> {
   const accountResult = await getStudentAccount(supabase, studentId)
   if (!accountResult.data) return { account: null, error: accountResult.error }
-  const paymentIds = accountResult.data.movements.filter((movement) => movement.movementType === "PAYMENT").map((movement) => movement.id)
-  const paymentsResult = await getStudentPaymentDetails(supabase, studentId, paymentIds)
-  return { account: { ...accountResult.data, payments: paymentsResult.data }, error: accountResult.error || paymentsResult.error }
+  return { account: { ...accountResult.data, payments: accountResult.data.movements.filter(isConfirmedPayment).map(mapPayment) }, error: accountResult.error }
 }
 
 export async function getTutorSummaries(supabase: SupabaseClient, students: TutorStudent[]) {
   const results = await Promise.all(students.map((student) => getStudentAccountSummary(supabase, student.id)))
   return new Map(students.map((student, index) => [student.id, results[index].data] as const))
+}
+
+export async function getTutorRecentPayments(supabase: SupabaseClient, students: TutorStudent[]) {
+  const results = await Promise.all(students.map(async (student) => {
+    const result = (await supabase.rpc("student_account_movements", { p_student_id: student.id })) as { data: StudentAccountMovement[] | null; error: unknown }
+    return result.error ? [] : (result.data ?? []).filter(isConfirmedPayment).map((movement) => ({ ...mapPayment(movement), studentName: student.fullName }))
+  }))
+  return results.flat().sort((left, right) => right.receivedAt.localeCompare(left.receivedAt)).slice(0, 8)
+}
+
+function isConfirmedPayment(movement: StudentAccountMovement) {
+  return movement.movementType === "PAYMENT" && movement.status === "CONFIRMED"
+}
+
+function mapPayment(movement: StudentAccountMovement): TutorPayment {
+  const [, ...methodParts] = movement.description.split(" · ")
+  return {
+    id: movement.id,
+    amount: movement.credit,
+    receivedAt: movement.recordedAt,
+    methodName: methodParts.join(" · ") || movement.description,
+    receivedByName: movement.receivedByNameSnapshot ?? "Personal administrativo",
+  }
 }
