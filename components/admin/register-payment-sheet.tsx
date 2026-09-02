@@ -24,6 +24,7 @@ import {
   type RegisterPaymentInput,
 } from "@/app/admin/alumnos/[id]/payment-actions"
 import { Button } from "@/components/ui/button"
+import { PaymentReceiptDownloadButton } from "@/components/admin/payment-receipt-download-button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -656,16 +657,13 @@ function PaymentSuccess({
       <p className="text-sm text-muted-foreground">El estado de cuenta se actualizó con la operación confirmada.</p>
       {paymentId && (
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button
-            type="button"
-            variant="outline"
+          <PaymentReceiptDownloadButton
+            href={`/admin/alumnos/${student.id}/pagos/${paymentId}/recibo`}
             className="h-10 w-full sm:w-auto"
-            nativeButton={false}
-            render={<a href={`/admin/alumnos/${student.id}/pagos/${paymentId}/recibo`} />}
           >
             <Download />
             Descargar recibo
-          </Button>
+          </PaymentReceiptDownloadButton>
           <Button
             type="button"
             variant="outline"

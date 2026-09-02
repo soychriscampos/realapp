@@ -23,6 +23,7 @@ import {
   updatePaymentMetadata,
 } from "@/app/admin/alumnos/[id]/payment-actions"
 import { Button } from "@/components/ui/button"
+import { PaymentReceiptDownloadButton } from "@/components/admin/payment-receipt-download-button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -300,16 +301,13 @@ function PaymentDetail({
           {payment.notes && <DetailItem label="Notas internas" value={payment.notes} />}
           {payment.receiptVisibleNote && <DetailItem label="Nota visible en recibo" value={payment.receiptVisibleNote} />}
         </dl>
-        <Button
-          type="button"
-          variant="outline"
+        <PaymentReceiptDownloadButton
+          href={`/admin/alumnos/${studentId}/pagos/${payment.id}/recibo`}
           className="h-10 w-full sm:w-auto"
-          nativeButton={false}
-          render={<a href={`/admin/alumnos/${studentId}/pagos/${payment.id}/recibo`} />}
         >
           <Download />
           Descargar recibo
-        </Button>
+        </PaymentReceiptDownloadButton>
         <Button
           type="button"
           variant="outline"
