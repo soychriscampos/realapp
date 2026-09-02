@@ -12,8 +12,13 @@ const errorMessage = (error?: { message?: string } | null) => error?.message?.re
 
 export async function getFamilyGuardianContext(guardianId: string) {
   const { supabase } = await requireRole(['MASTER', 'ADMINISTRATIVO'])
-  const { data, error } = await supabase.rpc('get_family_guardian_context', { p_guardian_id: guardianId })
-  return error ? { ok: false as const, message: errorMessage(error) } : { ok: true as const, rows: data ?? [] }
+  const [{ data, error }, { data: guardian, error: guardianError }] = await Promise.all([
+    supabase.rpc('get_family_guardian_context', { p_guardian_id: guardianId }),
+    supabase.from('guardians').select('auth_user_id').eq('id', guardianId).maybeSingle(),
+  ])
+  if (error || guardianError) return { ok: false as const, message: errorMessage(error ?? guardianError) }
+  const contextRows = (data ?? []) as Array<Record<string, unknown>>
+  return { ok: true as const, rows: contextRows.map((row) => ({ ...row, guardian_has_auth: Boolean(guardian?.auth_user_id) })) }
 }
 
 export async function createFamilyInvitation(input: { guardianId: string; studentIds: string[] }): Promise<Result> {
@@ -23,6 +28,12 @@ export async function createFamilyInvitation(input: { guardianId: string; studen
   if (error || !data) return { ok: false, message: errorMessage(error) }
   revalidatePath('/admin/alumnos')
   return { ok: true, link: `${getSiteUrl()}/onboarding/familia?token=${invite.raw}` }
+}
+
+export async function grantFamilyAccessToExistingGuardian(input: { guardianId: string; studentId: string }): Promise<Result> {
+  const { supabase } = await requireRole(['MASTER', 'ADMINISTRATIVO'])
+  const { data, error } = await supabase.rpc('grant_family_access_to_existing_guardian', { p_guardian_id: input.guardianId, p_student_id: input.studentId })
+  return error || !data ? { ok: false, message: errorMessage(error) } : { ok: true }
 }
 
 export async function regenerateFamilyInvitation(invitationId: string): Promise<Result> {
