@@ -50,6 +50,7 @@ export type CreateNewStudentEnrollmentInput = {
   studentSex: "H" | "M"
   studentBirthDate: string | null
   contacts: Array<{
+    guardian_id?: string
     full_name: string
     relationship: string
     phone: string
@@ -366,6 +367,7 @@ export async function createNewStudentEnrollment(
     p_student_sex: input.studentSex,
     p_student_birth_date: cleanText(input.studentBirthDate),
     p_contacts: input.contacts.map((contact) => ({
+      guardian_id: contact.guardian_id ?? null,
       full_name: contact.full_name.trim(),
       relationship: contact.relationship.trim(),
       phone: contact.phone.trim(),
@@ -775,6 +777,7 @@ export async function createPreregistrationIntake(
     p_campaign_id: input.campaignId,
     p_contacts: input.contacts.map((contact) => ({
       guardian_id: contact.guardianId,
+      via_email: contact.viaEmail ?? null,
       full_name: contact.fullName.trim(),
       phone: contact.phone.trim(),
       email: cleanText(contact.email),

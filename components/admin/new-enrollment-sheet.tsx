@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { getEnrollmentGroupLabel, type EnrollmentFinancialCoverage } from "@/lib/admin/enrollments"
-import { GUARDIAN_RELATIONSHIPS, isGuardianRelationship } from "@/lib/admin/guardian-relationships"
 import type { PaymentFormContext } from "@/lib/admin/payments"
 import type { StudentChargeBalance } from "@/lib/admin/student-account"
 import { calculateTuitionDiscountPreview, formatCurrency, formatTuitionDiscountValue, tuitionDiscountTypeLabel } from "@/lib/admin/tuition-discount-preview"
@@ -22,6 +21,7 @@ import { searchStudents, type StudentSearchResult } from "@/lib/admin/students"
 import { createClient } from "@/lib/supabase/client"
 import { RegisterPaymentSheet } from "@/components/admin/register-payment-sheet"
 import { cn } from "@/lib/utils"
+import { GuardianContactList } from "@/components/admin/guardian-picker"
 
 type Cycle = { id: string; name: string; starts_on: string }
 type Grade = { id: string; name: string; education_level_id: string; sort_order: number }
@@ -29,7 +29,7 @@ type Level = { id: string; name: string; sort_order: number }
 type Group = { id: string; name: string; code: string; grade_level_id: string; cycle_id: string }
 type Classification = { id: string; name: string }
 type Step = "student" | "academic" | "financial" | "review" | "payment" | "success"
-type Contact = { full_name: string; relationship: string; phone: string; email: string }
+type Contact = { guardian_id?: string; full_name: string; relationship: string; phone: string; email: string }
 
 type NewEnrollmentSheetProps = {
   cycles: Cycle[]
@@ -319,9 +319,6 @@ export function NewEnrollmentSheet({
     setStep(result.charges.length ? "payment" : "success")
   }
 
-  function updateContact(index: number, field: keyof Contact, value: string) {
-    setContacts((current) => current.map((contact, contactIndex) => contactIndex === index ? { ...contact, [field]: value } : contact))
-  }
 
   function stepError() {
     if (step === "student") {
@@ -433,7 +430,8 @@ export function NewEnrollmentSheet({
                   <div className="space-y-4">
                     <Field label="Nombre completo"><Input value={studentFullName} onChange={(event) => setStudentFullName(event.target.value)} placeholder="Nombre y apellidos" /></Field>
                     <div className="grid gap-4 sm:grid-cols-2"><Field label="Sexo"><select value={studentSex} onChange={(event) => setStudentSex(event.target.value as "H" | "M")} className={selectClass}><option value="H">H</option><option value="M">M</option></select></Field><Field label="Fecha de nacimiento"><Input type="date" value={studentBirthDate} onChange={(event) => setStudentBirthDate(event.target.value)} /></Field></div>
-                    <div className="space-y-3"><div><h3 className="text-sm font-semibold">Contactos</h3><p className="mt-1 text-sm text-muted-foreground">Puedes agregar hasta dos contactos.</p></div>{contacts.map((contact, index) => { const relationshipValue = isGuardianRelationship(contact.relationship) ? contact.relationship : contact.relationship ? "Otro" : ""; return <div key={index} className="space-y-3 rounded-lg border border-border p-4"><p className="text-sm font-medium">Contacto {index + 1}</p><Field label="Nombre completo"><Input value={contact.full_name} onChange={(event) => updateContact(index, "full_name", event.target.value)} /></Field><div className="grid gap-3 sm:grid-cols-2"><Field label="Parentesco"><select value={relationshipValue} onChange={(event) => { const value = event.target.value; updateContact(index, "relationship", value === "Otro" ? "Otro" : value); setContactOtherRelationships((current) => ({ ...current, [index]: value === "Otro" ? current[index] ?? "" : "" })) }} className={selectClass}><option value="">Selecciona un parentesco</option>{GUARDIAN_RELATIONSHIPS.map((relationship) => <option key={relationship} value={relationship}>{relationship}</option>)}</select></Field><Field label="Teléfono"><Input value={contact.phone} onChange={(event) => updateContact(index, "phone", event.target.value)} /></Field></div>{relationshipValue === "Otro" && <Field label="Especificar parentesco"><Input value={contactOtherRelationships[index] ?? (contact.relationship === "Otro" ? "" : contact.relationship)} onChange={(event) => { setContactOtherRelationships((current) => ({ ...current, [index]: event.target.value })); updateContact(index, "relationship", "Otro") }} /></Field>}<Field label="Email (opcional)"><Input type="email" value={contact.email} onChange={(event) => updateContact(index, "email", event.target.value)} /></Field><Button type="button" variant="ghost" size="sm" onClick={() => setContacts((current) => current.filter((_, contactIndex) => contactIndex !== index))}>Quitar contacto</Button></div> })}{contacts.length < 2 && <Button type="button" variant="outline" onClick={() => setContacts((current) => [...current, { full_name: "", relationship: "", phone: "", email: "" }])}><Plus /> Agregar contacto</Button>}</div>
+                    <GuardianContactList contacts={contacts.map((contact) => ({ guardianId: contact.guardian_id ?? null, fullName: contact.full_name, phone: contact.phone, email: contact.email, relationship: contact.relationship }))} onChange={(nextContacts) => setContacts(nextContacts.map((contact) => ({ guardian_id: contact.guardianId ?? undefined, full_name: contact.fullName, phone: contact.phone, email: contact.email, relationship: contact.relationship })))} />
+                    <div className="hidden" aria-hidden="true" />
                   </div>
                 ) : student ? (
                   <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
