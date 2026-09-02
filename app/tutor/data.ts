@@ -8,6 +8,33 @@ export type TutorStudent = {
   enrollment: { cycleName: string; levelName: string; gradeName: string; groupName: string | null } | null
 }
 
+export type TutorCycle = {
+  id: string
+  name: string
+  startsOn: string
+  endsOn: string
+  status: string
+}
+
+export type TutorTuitionAgreement = {
+  studentId: string
+  enrollmentId: string
+  cycleId: string
+  agreedAmount: string | null
+  hasMultipleAmounts: boolean
+  agreementCount: number
+}
+
+export type TutorContact = {
+  guardian_id: string
+  full_name: string | null
+  phone: string | null
+  email: string | null
+  relationship: string | null
+  via_whatsapp: boolean
+  via_email: boolean
+}
+
 type TutorRelation = { name: string; status?: string }
 type TutorGrade = TutorRelation & { education_levels?: TutorRelation | TutorRelation[] | null }
 type TutorEnrollment = {
@@ -47,18 +74,75 @@ export function chooseTutorStudent(students: TutorStudent[], requestedId?: strin
   return students.find((student) => student.id === requestedId) ?? students[0] ?? null
 }
 
+export function chooseTutorCycle(cycles: TutorCycle[], requestedId?: string) {
+  const requested = cycles.find((cycle) => cycle.id === requestedId)
+  if (requested) return requested
+  const today = new Date().toISOString().slice(0, 10)
+  return cycles.find((cycle) => cycle.startsOn <= today && cycle.endsOn >= today)
+    ?? [...cycles].sort((left, right) => right.endsOn.localeCompare(left.endsOn))[0]
+    ?? null
+}
+
+export async function getTutorCycles(supabase: SupabaseClient, studentId: string) {
+  const { data, error } = await supabase
+    .from("enrollments")
+    .select("cycle_id, school_cycles!inner(id, name, starts_on, ends_on, status)")
+    .eq("student_id", studentId)
+
+  if (error) return { cycles: [] as TutorCycle[], error: true }
+  const cycles = new Map<string, TutorCycle>()
+  for (const row of data ?? []) {
+    const cycle = Array.isArray(row.school_cycles) ? row.school_cycles[0] : row.school_cycles
+    if (!cycle || cycles.has(row.cycle_id)) continue
+    cycles.set(row.cycle_id, { id: cycle.id, name: cycle.name, startsOn: cycle.starts_on, endsOn: cycle.ends_on, status: cycle.status })
+  }
+  return { cycles: [...cycles.values()].sort((left, right) => right.startsOn.localeCompare(left.startsOn)), error: false }
+}
+
+export async function getTutorTuitionAgreement(supabase: SupabaseClient, studentId: string, cycleId: string) {
+  const { data, error } = await supabase.rpc("family_student_tuition_agreement", { p_student_id: studentId, p_cycle_id: cycleId })
+  const row = Array.isArray(data) ? data[0] as Record<string, unknown> | undefined : undefined
+  if (error || !row) return { agreement: null, error: Boolean(error) }
+  return {
+    agreement: {
+      studentId: String(row.student_id),
+      enrollmentId: String(row.enrollment_id),
+      cycleId: String(row.cycle_id),
+      agreedAmount: row.agreed_amount === null || row.agreed_amount === undefined ? null : String(row.agreed_amount),
+      hasMultipleAmounts: row.has_multiple_amounts === true,
+      agreementCount: Number(row.agreement_count),
+    } satisfies TutorTuitionAgreement,
+    error: false,
+  }
+}
+
 export async function getTutorGuardian(supabase: SupabaseClient) {
   const { data, error } = await supabase.from("guardians").select("id, full_name, phone, email").not("auth_user_id", "is", null).maybeSingle()
   return { guardian: data, error: Boolean(error) }
 }
 
 export async function getTutorStudentContacts(supabase: SupabaseClient, studentId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await supabase.rpc("family_student_contacts", { p_student_id: studentId })
+  if (!error) return { contacts: (data ?? []) as TutorContact[], error: false }
+
+  const fallback = await supabase
     .from("student_guardians")
-    .select("relationship, via_whatsapp, via_email, guardians!inner(full_name, phone, email)")
+    .select("guardian_id, relationship, via_whatsapp, via_email, guardians!inner(id, full_name, phone, email)")
     .eq("student_id", studentId)
     .eq("is_active", true)
-  return { contacts: data ?? [], error: Boolean(error) }
+  const contacts = (fallback.data ?? []).map((row) => {
+    const guardian = Array.isArray(row.guardians) ? row.guardians[0] : row.guardians
+    return {
+      guardian_id: row.guardian_id,
+      full_name: guardian?.full_name ?? null,
+      phone: guardian?.phone ?? null,
+      email: guardian?.email ?? null,
+      relationship: row.relationship,
+      via_whatsapp: row.via_whatsapp,
+      via_email: row.via_email,
+    }
+  }) as TutorContact[]
+  return { contacts, error: Boolean(fallback.error) }
 }
 
 export type TutorPayment = {
