@@ -5,6 +5,7 @@ import { notFound } from "next/navigation"
 import { EnrollmentActions } from "@/components/admin/enrollment-actions"
 import { EnrollmentCycleSelect } from "@/components/admin/enrollment-cycle-select"
 import { AddGuardianSheet, EditGuardianSheet } from "@/components/admin/edit-guardian-sheet"
+import { FamilyAccessSheet } from "@/components/admin/family-access-sheet"
 import { EditStudentBasicsSheet } from "@/components/admin/edit-student-basics-sheet"
 import { AccountSummary } from "@/components/admin/student-account"
 import { RegisterPaymentSheet } from "@/components/admin/register-payment-sheet"
@@ -389,7 +390,7 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
                           {guardian.phone && <p className="mt-1 text-sm text-muted-foreground">{guardian.phone}</p>}
                           {guardian.email && <p className="mt-1 break-words text-sm text-muted-foreground">{guardian.email}</p>}
                         </div>
-                        <EditGuardianSheet studentId={student.id} guardian={guardian} />
+                        <div className="flex shrink-0 items-center gap-1"><EditGuardianSheet studentId={student.id} guardian={guardian} /><FamilyAccessSheet guardianId={guardian.guardianId} guardianName={guardian.fullName} /></div>
                       </div>
                     </div>
                   ))}

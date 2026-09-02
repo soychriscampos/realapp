@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { GUARDIAN_RELATIONSHIPS, isGuardianRelationship } from "@/lib/admin/guardian-relationships"
+import { GuardianPicker } from "@/components/admin/guardian-picker"
+import type { GuardianSearchResult } from "@/lib/admin/guardians"
 
 type Guardian = {
   guardianId: string
@@ -107,6 +109,7 @@ export function AddGuardianSheet({ studentId }: { studentId: string }) {
   const [email, setEmail] = useState("")
   const [viaEmail, setViaEmail] = useState(true)
   const [viaWhatsapp, setViaWhatsapp] = useState(false)
+  const [selectedGuardian, setSelectedGuardian] = useState<GuardianSearchResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const toastManager = Toast.useToastManager()
@@ -121,7 +124,7 @@ export function AddGuardianSheet({ studentId }: { studentId: string }) {
   function submit() {
     setError(null)
     startTransition(async () => {
-      const result = await addStudentGuardian({ studentId, fullName, relationship: relationship === "Otro" ? relationshipOther : relationship, phone, email, viaEmail, viaWhatsapp })
+      const result = await addStudentGuardian({ studentId, guardianId: selectedGuardian?.id, fullName, relationship: relationship === "Otro" ? relationshipOther : relationship, phone, email, viaEmail, viaWhatsapp })
       if (!result.ok) {
         setError(result.message)
         return
@@ -136,6 +139,7 @@ export function AddGuardianSheet({ studentId }: { studentId: string }) {
       setEmail("")
       setViaEmail(true)
       setViaWhatsapp(false)
+      setSelectedGuardian(null)
       toastManager.add({ title: "Familiar agregado", description: "El tutor fue vinculado al alumno." })
     })
   }
@@ -155,10 +159,10 @@ export function AddGuardianSheet({ studentId }: { studentId: string }) {
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
             <div className="space-y-4">
-              <Field label="Nombre"><Input value={fullName} onChange={(event) => setFullName(event.target.value)} /></Field>
+              {!selectedGuardian && <GuardianPicker selected={null} onSelect={(guardian) => { setSelectedGuardian(guardian); setFullName(guardian.fullName); setPhone(guardian.phone ?? ""); setEmail(guardian.email ?? "") }} onClear={() => undefined} />}
+              {selectedGuardian ? <><GuardianPicker selected={selectedGuardian} onSelect={setSelectedGuardian} onClear={() => { setSelectedGuardian(null); setFullName(""); setPhone(""); setEmail("") }} /><p className="text-xs text-muted-foreground">Nombre, teléfono y correo son datos canónicos del contacto y no se modifican aquí.</p></> : <Field label="Nombre"><Input value={fullName} onChange={(event) => setFullName(event.target.value)} /></Field>}
               <RelationshipField value={relationship} otherValue={relationshipOther} onChange={setRelationship} onOtherChange={setRelationshipOther} />
-              <Field label="Teléfono"><Input value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" /></Field>
-              <Field label="Correo de contacto"><Input value={email} onChange={(event) => setEmail(event.target.value)} type="email" /></Field>
+              {!selectedGuardian && <><Field label="Teléfono"><Input value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" /></Field><Field label="Correo de contacto"><Input value={email} onChange={(event) => setEmail(event.target.value)} type="email" /></Field></>}
               <fieldset className="space-y-3 border-t border-border pt-4">
                 <legend className="text-sm font-medium">Canales de aviso</legend>
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={viaEmail} onChange={(event) => setViaEmail(event.target.checked)} /> Correo electrónico</label>

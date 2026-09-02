@@ -17,6 +17,7 @@ export type UpdateGuardianInput = {
 
 export type AddGuardianInput = {
   studentId: string
+  guardianId?: string
   fullName: string
   relationship: string
   phone: string
@@ -96,27 +97,42 @@ export async function addStudentGuardian(input: AddGuardianInput): Promise<{ ok:
   }
 
   const nextPriority = Math.max(0, ...(activeRelations ?? []).map((relation) => relation.priority ?? 0)) + 1
-  const { data: guardian, error: guardianError } = await supabase
-    .from("guardians")
-    .insert({ full_name: fullName, phone: phone || null, email: email || null })
-    .select("id")
-    .single()
+  let guardian: { id: string } | null = null
+  let guardianError: { code?: string; message?: string } | null = null
+
+  if (input.guardianId) {
+    const { data, error } = await supabase.from("guardians").select("id").eq("id", input.guardianId).maybeSingle()
+    guardian = data
+    guardianError = error
+    if (guardianError || !guardian) return { ok: false, message: "No encontramos el contacto seleccionado." }
+  } else {
+    const result = await supabase
+      .from("guardians")
+      .insert({ full_name: fullName, phone: phone || null, email: email || null })
+      .select("id")
+      .single()
+    guardian = result.data
+    guardianError = result.error
+  }
 
   if (guardianError || !guardian) {
     console.error("addStudentGuardian guardian", guardianError)
+    if (guardianError?.code === "23505" && email) return { ok: false, message: "Ya existe un contacto registrado con este correo. Búscalo y agrégalo como contacto existente." }
     return { ok: false, message: "No pudimos crear el familiar." }
   }
 
-  const { error: relationError } = await supabase
+  const { data: existingRelation, error: existingRelationError } = await supabase
     .from("student_guardians")
-    .insert({
-      student_id: input.studentId,
-      guardian_id: guardian.id,
-      relationship,
-      priority: nextPriority,
-      via_email: input.viaEmail,
-      via_whatsapp: input.viaWhatsapp,
-    })
+    .select("id, priority")
+    .eq("student_id", input.studentId)
+    .eq("guardian_id", guardian.id)
+    .maybeSingle()
+  if (existingRelationError) return { ok: false, message: "No pudimos revisar la relación del familiar con el alumno." }
+
+  const relationQuery = existingRelation
+    ? supabase.from("student_guardians").update({ relationship, via_email: input.viaEmail, via_whatsapp: input.viaWhatsapp, is_active: true, ended_at: null }).eq("id", existingRelation.id)
+    : supabase.from("student_guardians").insert({ student_id: input.studentId, guardian_id: guardian.id, relationship, priority: nextPriority, via_email: input.viaEmail, via_whatsapp: input.viaWhatsapp })
+  const { error: relationError } = await relationQuery
 
   if (relationError) {
     console.error("addStudentGuardian relation", relationError)
