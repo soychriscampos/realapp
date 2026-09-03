@@ -168,10 +168,32 @@ export async function getTutorSummaries(supabase: SupabaseClient, students: Tuto
 
 export async function getTutorRecentPayments(supabase: SupabaseClient, students: TutorStudent[]) {
   const results = await Promise.all(students.map(async (student) => {
-    const result = (await supabase.rpc("student_account_movements", { p_student_id: student.id })) as { data: StudentAccountMovement[] | null; error: unknown }
-    return result.error ? [] : (result.data ?? []).filter(isConfirmedPayment).map((movement) => ({ ...mapPayment(movement), studentName: student.fullName }))
+    const result = (await supabase.rpc("student_account_movements", { p_student_id: student.id })) as { data: Array<Record<string, unknown>> | null; error: unknown }
+    const movements = (result.data ?? []).map(mapTutorMovement)
+    return result.error ? [] : movements.filter(isConfirmedPayment).map((movement) => ({ ...mapPayment(movement), studentName: student.fullName }))
   }))
-  return results.flat().sort((left, right) => right.receivedAt.localeCompare(left.receivedAt)).slice(0, 8)
+  return results.flat().sort((left, right) => right.receivedAt.localeCompare(left.receivedAt)).slice(0, 5)
+}
+
+function mapTutorMovement(row: Record<string, unknown>): StudentAccountMovement {
+  return {
+    id: String(row.reference_id ?? ""),
+    parentId: row.parent_reference_id ? String(row.parent_reference_id) : null,
+    cycleId: row.cycle_id ? String(row.cycle_id) : null,
+    financialConceptId: row.financial_concept_id ? String(row.financial_concept_id) : null,
+    conceptCode: row.concept_code ? String(row.concept_code) : null,
+    conceptName: null,
+    coverageYear: typeof row.coverage_year === "number" ? row.coverage_year : null,
+    coverageMonth: typeof row.coverage_month === "number" ? row.coverage_month : null,
+    movementOn: String(row.movement_on ?? ""),
+    recordedAt: String(row.recorded_at ?? ""),
+    movementType: String(row.movement_type ?? ""),
+    description: String(row.description ?? ""),
+    receivedByNameSnapshot: row.received_by_name_snapshot ? String(row.received_by_name_snapshot) : null,
+    debit: String(row.debit ?? "0"),
+    credit: String(row.credit ?? "0"),
+    status: String(row.status ?? ""),
+  }
 }
 
 function isConfirmedPayment(movement: StudentAccountMovement) {
