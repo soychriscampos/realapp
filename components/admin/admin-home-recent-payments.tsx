@@ -25,7 +25,7 @@ export function AdminHomeRecentPayments({
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-white">
-      {payments.map(({ studentId, studentName, payment, charges }) => (
+      {payments.map(({ studentId, studentName, payment, charges, hasEmailRecipients }) => (
         <div
           key={payment.id}
           className="flex min-h-[76px] items-center justify-between gap-4 border-b border-border px-4 py-3 last:border-b-0"
@@ -49,6 +49,7 @@ export function AdminHomeRecentPayments({
               studentId={studentId}
               payment={payment}
               charges={charges}
+              hasEmailRecipients={hasEmailRecipients}
               canManage={isMaster}
               triggerClassName="flex size-9 items-center justify-center rounded-lg hover:bg-muted hover:no-underline"
               triggerLabel={<ChevronRight className="size-4 text-muted-foreground" />}

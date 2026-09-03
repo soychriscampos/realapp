@@ -18,6 +18,7 @@ type StudentAccountDetailsProps = {
   movements: StudentAccountMovement[]
   payments: StudentPaymentDetail[]
   studentId: string
+  hasEmailRecipients: boolean
   currentReceiverId: string | null
   isMaster: boolean
   paymentDetailsError?: boolean
@@ -36,6 +37,7 @@ export function StudentAccountDetails({
   movements,
   payments: paymentDetailsData,
   studentId,
+  hasEmailRecipients,
   currentReceiverId,
   isMaster,
   paymentDetailsError = false,
@@ -94,6 +96,7 @@ export function StudentAccountDetails({
         payments={paymentDetailsData}
         charges={charges}
         studentId={studentId}
+        hasEmailRecipients={hasEmailRecipients}
         currentReceiverId={currentReceiverId}
         isMaster={isMaster}
         detailsError={paymentDetailsError}
@@ -205,6 +208,7 @@ function PaymentHistory({
   payments: paymentDetailsData,
   charges,
   studentId,
+  hasEmailRecipients,
   currentReceiverId,
   isMaster,
   detailsError,
@@ -213,6 +217,7 @@ function PaymentHistory({
   payments: StudentPaymentDetail[]
   charges: StudentChargeBalance[]
   studentId: string
+  hasEmailRecipients: boolean
   currentReceiverId: string | null
   isMaster: boolean
   detailsError: boolean
@@ -267,6 +272,7 @@ function PaymentHistory({
                     payment={paymentDetails.get(payment.id)}
                     charges={charges}
                     studentId={studentId}
+                    hasEmailRecipients={hasEmailRecipients}
                     currentReceiverId={currentReceiverId}
                     isMaster={isMaster}
                   />
@@ -283,6 +289,7 @@ function PaymentHistory({
                 payment={paymentDetails.get(payment.id)}
                 charges={charges}
                 studentId={studentId}
+                hasEmailRecipients={hasEmailRecipients}
                 currentReceiverId={currentReceiverId}
                 isMaster={isMaster}
               />
@@ -370,6 +377,7 @@ function PaymentTableRow({
   payment,
   charges,
   studentId,
+  hasEmailRecipients,
   currentReceiverId,
   isMaster,
 }: {
@@ -377,6 +385,7 @@ function PaymentTableRow({
   payment: StudentPaymentDetail | undefined
   charges: StudentChargeBalance[]
   studentId: string
+  hasEmailRecipients: boolean
   currentReceiverId: string | null
   isMaster: boolean
 }) {
@@ -400,6 +409,7 @@ function PaymentTableRow({
             studentId={studentId}
             payment={payment}
             charges={charges}
+            hasEmailRecipients={hasEmailRecipients}
             canManage={canManagePayment(payment, currentReceiverId, isMaster)}
           />
         )}
@@ -413,6 +423,7 @@ function PaymentMobileRow({
   payment,
   charges,
   studentId,
+  hasEmailRecipients,
   currentReceiverId,
   isMaster,
 }: {
@@ -420,6 +431,7 @@ function PaymentMobileRow({
   payment: StudentPaymentDetail | undefined
   charges: StudentChargeBalance[]
   studentId: string
+  hasEmailRecipients: boolean
   currentReceiverId: string | null
   isMaster: boolean
 }) {
@@ -443,6 +455,7 @@ function PaymentMobileRow({
             studentId={studentId}
             payment={payment}
             charges={charges}
+            hasEmailRecipients={hasEmailRecipients}
             canManage={canManagePayment(payment, currentReceiverId, isMaster)}
           />
         )}

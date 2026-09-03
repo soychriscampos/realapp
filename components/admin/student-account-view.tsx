@@ -1,9 +1,7 @@
-import { Download } from "lucide-react"
-
 import { AccountSummary } from "@/components/admin/student-account"
+import { AccountStatementDownloadButton } from "@/components/admin/account-statement-download-button"
 import { StudentAccountDetails } from "@/components/admin/student-account-details"
 import { SendAccountStatementButton } from "@/components/admin/send-account-statement-button"
-import { Button } from "@/components/ui/button"
 import type { StudentAccount, StudentPaymentDetail } from "@/lib/admin/student-account"
 
 type StudentAccountViewProps = {
@@ -32,15 +30,7 @@ export function StudentAccountView({
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold">Estado de cuenta</h2>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Button
-            variant="outline"
-            className="h-10 w-full sm:w-auto"
-            nativeButton={false}
-            render={<a href={`/admin/alumnos/${student.id}/cuenta/pdf`} />}
-          >
-            <Download />
-            Descargar
-          </Button>
+          <AccountStatementDownloadButton href={`/admin/alumnos/${student.id}/cuenta/pdf`} />
           <SendAccountStatementButton
             studentId={student.id}
             hasRecipients={hasEmailRecipients}
@@ -60,6 +50,7 @@ export function StudentAccountView({
         movements={account.movements}
         payments={payments}
         studentId={student.id}
+        hasEmailRecipients={hasEmailRecipients}
         currentReceiverId={currentReceiverId}
         isMaster={isMaster}
         paymentDetailsError={paymentDetailsError}

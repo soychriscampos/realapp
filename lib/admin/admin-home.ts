@@ -7,6 +7,7 @@ import {
   type StudentPaymentDetail,
 } from "@/lib/admin/student-account"
 import { getPaymentFormContext } from "@/lib/admin/payments"
+import { getStudentEmailRecipients } from "@/lib/email/recipients"
 
 export type AdminHomeOverdueItem = {
   studentId: string
@@ -21,6 +22,7 @@ export type AdminHomeRecentPayment = {
   studentName: string
   payment: StudentPaymentDetail
   charges: StudentChargeBalance[]
+  hasEmailRecipients: boolean
 }
 
 export type AdminHomeData = {
@@ -114,13 +116,20 @@ async function enrichDirectPayments(supabase: SupabaseClient, rows: AdminPayment
     const studentId = text(row.student_id)
     const paymentId = text(row.id)
     if (!studentId || !paymentId) return []
-    const [detailsResult, chargesResult] = await Promise.all([
+    const [detailsResult, chargesResult, recipientsResult] = await Promise.all([
       getStudentPaymentDetails(supabase, studentId, [paymentId]),
       getStudentChargeBalances(supabase, studentId),
+      getStudentEmailRecipients(supabase, studentId),
     ])
     const payment = detailsResult.data[0]
     const student = record(row.students)
-    return payment ? [{ studentId, studentName: text(student?.full_name), payment, charges: chargesResult.error ? [] : chargesResult.data }] : []
+    return payment ? [{
+      studentId,
+      studentName: text(student?.full_name),
+      payment,
+      charges: chargesResult.error ? [] : chargesResult.data,
+      hasEmailRecipients: !recipientsResult.error && recipientsResult.data.length > 0,
+    }] : []
   }))
 
   return items.flat()

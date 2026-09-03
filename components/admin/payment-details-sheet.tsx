@@ -38,6 +38,7 @@ type PaymentDetailsSheetProps = {
   studentId: string
   payment: StudentPaymentDetail
   charges: StudentChargeBalance[]
+  hasEmailRecipients: boolean
   canManage: boolean
   triggerClassName?: string
   triggerLabel?: ReactNode
@@ -50,6 +51,7 @@ export function PaymentDetailsSheet({
   studentId,
   payment,
   charges,
+  hasEmailRecipients,
   canManage,
   triggerClassName,
   triggerLabel = "Ver detalle",
@@ -143,6 +145,7 @@ export function PaymentDetailsSheet({
                 studentId={studentId}
                 payment={payment}
                 charges={chargeById}
+                hasEmailRecipients={hasEmailRecipients}
                 sendingReceipt={isSendingReceipt}
                 canManage={canManage}
                 confirmed={confirmed}
@@ -263,6 +266,7 @@ function PaymentDetail({
   studentId,
   payment,
   charges,
+  hasEmailRecipients,
   sendingReceipt,
   canManage,
   confirmed,
@@ -275,6 +279,7 @@ function PaymentDetail({
   studentId: string
   payment: StudentPaymentDetail
   charges: Map<string, StudentChargeBalance>
+  hasEmailRecipients: boolean
   sendingReceipt: boolean
   canManage: boolean
   confirmed: boolean
@@ -312,8 +317,9 @@ function PaymentDetail({
           type="button"
           variant="outline"
           className="h-10 w-full sm:w-auto"
-          disabled={sendingReceipt}
+          disabled={!hasEmailRecipients || sendingReceipt}
           onClick={onSendReceipt}
+          title={!hasEmailRecipients ? "No hay un correo habilitado para este alumno." : undefined}
         >
           {sendingReceipt ? <LoaderCircle className="animate-spin" /> : <Mail />}
           {sendingReceipt ? "Enviando..." : "Enviar por correo"}

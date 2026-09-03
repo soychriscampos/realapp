@@ -78,6 +78,7 @@ export default async function StudentAccountPage({ params, searchParams }: Stude
             receivers={paymentContextResult.data?.receivers ?? []}
             currentReceiverId={paymentContextResult.data?.currentReceiverId ?? null}
             canReceiveForOthers={roles.includes("MASTER")}
+            hasEmailRecipients={!emailRecipientsResult.error && emailRecipientsResult.data.length > 0}
             disabledReason={paymentUnavailableReason(
               paymentContextResult.error,
               paymentContextResult.data?.currentReceiverId,

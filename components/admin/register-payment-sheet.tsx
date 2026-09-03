@@ -50,6 +50,7 @@ type RegisterPaymentSheetProps = {
   receivers: PaymentReceiverOption[]
   currentReceiverId: string | null
   canReceiveForOthers: boolean
+  hasEmailRecipients?: boolean
   disabledReason?: string
   triggerClassName?: string
   open?: boolean
@@ -79,6 +80,7 @@ export function RegisterPaymentSheet({
   receivers,
   currentReceiverId,
   canReceiveForOthers,
+  hasEmailRecipients = false,
   disabledReason,
   triggerClassName,
   open: controlledOpen,
@@ -387,6 +389,7 @@ export function RegisterPaymentSheet({
                 student={student}
                 paymentId={paymentId}
                 snapshot={snapshot}
+                hasEmailRecipients={hasEmailRecipients}
                 isSendingReceipt={isSendingReceipt}
                 onSendReceipt={sendReceipt}
               />
@@ -629,12 +632,14 @@ function PaymentSuccess({
   student,
   paymentId,
   snapshot,
+  hasEmailRecipients,
   isSendingReceipt,
   onSendReceipt,
 }: {
   student: RegisterPaymentSheetProps["student"]
   paymentId: string | null
   snapshot: PaymentSnapshot
+  hasEmailRecipients: boolean
   isSendingReceipt: boolean
   onSendReceipt: () => void
 }) {
@@ -668,8 +673,9 @@ function PaymentSuccess({
             type="button"
             variant="outline"
             className="h-10 w-full sm:w-auto"
-            disabled={isSendingReceipt}
+            disabled={!hasEmailRecipients || isSendingReceipt}
             onClick={onSendReceipt}
+            title={!hasEmailRecipients ? "No hay un correo habilitado para este alumno." : undefined}
           >
             {isSendingReceipt ? <LoaderCircle className="animate-spin" /> : <Mail />}
             {isSendingReceipt ? "Enviando..." : "Enviar por correo"}

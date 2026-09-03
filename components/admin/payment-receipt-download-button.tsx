@@ -1,6 +1,7 @@
 "use client"
 
 import { Toast } from "@base-ui/react/toast"
+import { LoaderCircle } from "lucide-react"
 import { useState, type ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -63,7 +64,7 @@ export function PaymentReceiptDownloadButton({
       disabled={isLoading}
       onClick={downloadReceipt}
     >
-      {children}
+      {isLoading ? <><LoaderCircle className="animate-spin" /> Descargando...</> : children}
     </Button>
   )
 }

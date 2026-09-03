@@ -67,9 +67,7 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
     activeTab === "account"
       ? getStudentAccount(supabase, id)
       : Promise.resolve({ data: null, error: false }),
-    activeTab === "account"
-      ? getStudentEmailRecipients(supabase, id)
-      : Promise.resolve({ data: [], error: false }),
+    getStudentEmailRecipients(supabase, id),
   ])
 
   if (error) return <StudentDetailLoadError />
@@ -161,6 +159,7 @@ export default async function StudentDetailPage({ params, searchParams }: Studen
             receivers={paymentContextResult.data?.receivers ?? []}
             currentReceiverId={paymentContextResult.data?.currentReceiverId ?? null}
             canReceiveForOthers={roles.includes("MASTER")}
+            hasEmailRecipients={!emailRecipientsResult.error && emailRecipientsResult.data.length > 0}
             disabledReason={paymentUnavailableReason(
               chargeBalancesResult.error,
               paymentContextResult.error,
