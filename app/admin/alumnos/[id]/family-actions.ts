@@ -142,3 +142,24 @@ export async function addStudentGuardian(input: AddGuardianInput): Promise<{ ok:
   revalidatePath(`/admin/alumnos/${input.studentId}`)
   return { ok: true }
 }
+
+export async function unlinkGuardianFromStudent(input: { studentId: string; guardianId: string }): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!input.studentId || !input.guardianId) {
+    return { ok: false, message: "No pudimos identificar al alumno y al tutor." }
+  }
+
+  const { supabase } = await requireRole(["MASTER", "ADMINISTRATIVO"])
+  const { error } = await supabase.rpc("unlink_guardian_from_student", {
+    p_student_id: input.studentId,
+    p_guardian_id: input.guardianId,
+    p_reason: "Acceso revocado por desvinculación del tutor del alumno.",
+  })
+
+  if (error) {
+    console.error("unlinkGuardianFromStudent", error)
+    return { ok: false, message: "No pudimos desvincular al tutor del alumno." }
+  }
+
+  revalidatePath(`/admin/alumnos/${input.studentId}`)
+  return { ok: true }
+}

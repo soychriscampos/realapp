@@ -46,6 +46,7 @@ export type StudentDetail = {
     viaWhatsapp: boolean
   }>
   familyAccess: Array<{
+    guardianId: string
     guardianName: string
     status: "ACTIVE" | "REVOKED"
   }>
@@ -298,7 +299,7 @@ export async function getStudentDetail(
       .order("priority"),
     supabase
       .from("family_access")
-      .select("status, guardians!inner(full_name)")
+      .select("guardian_id, status, guardians!inner(full_name)")
       .eq("student_id", studentId)
       .order("granted_at", { ascending: false }),
   ])
@@ -338,7 +339,7 @@ export async function getStudentDetail(
         const status = row.status === "ACTIVE" || row.status === "REVOKED" ? row.status : null
         if (!guardian || !status) return []
 
-        return [{ guardianName: asText(guardian.full_name), status }]
+        return [{ guardianId: asText(row.guardian_id), guardianName: asText(guardian.full_name), status }]
       }),
     },
     error: false,
