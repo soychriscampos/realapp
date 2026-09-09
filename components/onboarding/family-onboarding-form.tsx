@@ -44,7 +44,7 @@ export function FamilyOnboardingForm({ token, students }: { token: string; stude
       const { data: signupData, error: signupError } = await createClient().auth.signUp({
         email: email.trim(),
         password,
-        options: { emailRedirectTo: `${getSiteUrl()}/auth/familia/callback?token=${encodeURIComponent(token)}` },
+        options: { emailRedirectTo: `${getSiteUrl()}/auth/confirm` },
       })
       if (signupError) {
         if (/already|registered|exists|existe|registrado/i.test(signupError.message)) {

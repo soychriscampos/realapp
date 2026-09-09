@@ -29,7 +29,13 @@ export async function login(formData: FormData) {
 
   try {
     await resolvePendingOnboarding(supabase)
-  } catch {
+  } catch (onboardingError) {
+    console.error('[Login onboarding] resolvePendingOnboarding failed', {
+      code: onboardingError instanceof Error && 'code' in onboardingError ? onboardingError.code : null,
+      message: onboardingError instanceof Error ? onboardingError.message : null,
+      details: onboardingError instanceof Error && 'details' in onboardingError ? onboardingError.details : null,
+      hint: onboardingError instanceof Error && 'hint' in onboardingError ? onboardingError.hint : null,
+    })
     redirect('/login?error=onboarding')
   }
 
