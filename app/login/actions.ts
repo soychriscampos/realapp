@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getHomeRoute } from '@/lib/auth/home-route'
+import { resolvePendingOnboarding } from '@/lib/auth/onboarding'
 
 export async function login(formData: FormData) {
   const email = String(formData.get('email') ?? '').trim()
@@ -24,6 +25,12 @@ export async function login(formData: FormData) {
 
   if (error || !user) {
     redirect('/login?error=invalid')
+  }
+
+  try {
+    await resolvePendingOnboarding(supabase)
+  } catch {
+    redirect('/login?error=onboarding')
   }
 
   const homeRoute = await getHomeRoute(supabase, user.id)

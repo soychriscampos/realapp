@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getHomeRoute } from '@/lib/auth/home-route'
+import { resolvePendingOnboarding } from '@/lib/auth/onboarding'
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
   const token = url.searchParams.get('token')
-  if (!code || !token || !/^[0-9a-f]{64}$/i.test(token)) {
+  if (!code) {
     console.warn('[staff onboarding callback] invalid parameters', { hasCode: Boolean(code), hasToken: Boolean(token) })
     return NextResponse.redirect(new URL('/login?error=invalid', request.url))
   }
@@ -24,15 +26,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/login?error=onboarding', request.url))
   }
 
-  const tokenHash = createHash('sha256').update(token).digest('hex')
-  const { error: completionError } = await supabase.rpc('complete_staff_onboarding', { p_token_hash: tokenHash })
-  if (completionError) {
-    console.error('[staff onboarding callback] completion error', { name: completionError.name, message: completionError.message, code: completionError.code ?? null, details: completionError.details ?? null, hint: completionError.hint ?? null })
-    // Conserva la sesión para que el usuario pueda ver el error y reintentar
-    // cuando el problema transitorio haya sido corregido.
-    return NextResponse.redirect(new URL('/login?error=onboarding', request.url))
+  if (token && /^[0-9a-f]{64}$/i.test(token)) {
+    const tokenHash = createHash('sha256').update(token).digest('hex')
+    const { error: completionError } = await supabase.rpc('complete_staff_onboarding', { p_token_hash: tokenHash })
+    if (completionError) {
+      console.error('[staff onboarding callback] completion error', { name: completionError.name, message: completionError.message, code: completionError.code ?? null, details: completionError.details ?? null, hint: completionError.hint ?? null })
+      return NextResponse.redirect(new URL('/login?error=onboarding', request.url))
+    }
+  } else {
+    try {
+      await resolvePendingOnboarding(supabase)
+    } catch (error) {
+      console.error('[staff onboarding callback] pending completion error', error)
+      return NextResponse.redirect(new URL('/login?error=onboarding', request.url))
+    }
   }
 
-  await supabase.auth.signOut()
-  return NextResponse.redirect(new URL('/login?confirmed=1', request.url))
+  const { data: claimsData } = await supabase.auth.getClaims()
+  const userId = claimsData?.claims?.sub
+  const homeRoute = typeof userId === 'string' ? await getHomeRoute(supabase, userId) : null
+  return NextResponse.redirect(new URL(homeRoute ?? '/login?error=unauthorized', request.url))
 }
