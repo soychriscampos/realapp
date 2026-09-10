@@ -12,6 +12,14 @@ import { getSiteUrl } from "@/lib/site/url"
 export function FamilyOnboardingForm({ token, students }: { token: string; students: Array<{ id: string; name: string }> }) {
   const router = useRouter()
   const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [confirmation, setConfirmation] = useState(""); const [visible, setVisible] = useState(false); const [confirmationVisible, setConfirmationVisible] = useState(false); const [mode, setMode] = useState<"signup" | "login">("signup"); const [done, setDone] = useState(false); const [error, setError] = useState<string | null>(null); const [pending, setPending] = useState(false)
+  async function claimInvitation(client: ReturnType<typeof createClient>, value: string) {
+    const { error: claimError } = await client.rpc("claim_family_invitation_email", { p_token_hash: await hashToken(token), p_email: value.trim() })
+    if (claimError) {
+      setError("La invitación no es válida o el correo ya fue asociado.")
+      return false
+    }
+    return true
+  }
   async function completeInvitation() {
     const { error: completionError } = await createClient().rpc("complete_family_onboarding", { p_token_hash: await hashToken(token) })
     if (completionError) {
@@ -31,8 +39,10 @@ export function FamilyOnboardingForm({ token, students }: { token: string; stude
 
     setPending(true)
     try {
+      const client = createClient()
+      if (!await claimInvitation(client, email)) return
       if (mode === "login") {
-        const { error: loginError } = await createClient().auth.signInWithPassword({ email: email.trim(), password })
+        const { error: loginError } = await client.auth.signInWithPassword({ email: email.trim(), password })
         if (loginError) {
           setError("El correo o la contraseña no son correctos.")
           return
@@ -41,7 +51,7 @@ export function FamilyOnboardingForm({ token, students }: { token: string; stude
         return
       }
 
-      const { data: signupData, error: signupError } = await createClient().auth.signUp({
+      const { data: signupData, error: signupError } = await client.auth.signUp({
         email: email.trim(),
         password,
         options: { emailRedirectTo: `${getSiteUrl()}/auth/confirm` },
