@@ -30,6 +30,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
   formatCurrency,
+  isChargeVisibleInCycle,
   isChargeEligibleForPaymentAllocation,
   type StudentChargeBalance,
 } from "@/lib/admin/student-account"
@@ -125,7 +126,7 @@ export function RegisterPaymentSheet({
     () => pendingCharges.filter((charge) => {
       const currentCents = userAmountToCents(allocations[charge.id] ?? "") ?? 0
       const proposedCents = userAmountToCents(proposal[charge.id] ?? "") ?? 0
-      return currentCents > 0 || currentCents !== proposedCents
+      return isChargeVisibleInCycle(charge) || proposedCents > 0 || currentCents > 0 || currentCents !== proposedCents
     }),
     [allocations, pendingCharges, proposal]
   )
