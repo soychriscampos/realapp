@@ -1043,13 +1043,13 @@ export async function correctEnrollmentAcademicDates(input: {
 export async function setEnrollmentTuitionDiscount(input: {
   enrollmentId: string
   studentId: string
-  categoryId: string
+  categoryId: string | null
   effectiveOn: string
   effectMode: "CURRENT" | "NEXT" | "PROPORTIONAL"
   currentPeriodAmount: string | null
   reason: string
 }): Promise<EnrollmentMutationResult> {
-  if (!input.enrollmentId || !input.studentId || !input.categoryId) return { ok: false, message: "Selecciona una categoría de descuento." }
+  if (!input.enrollmentId || !input.studentId) return { ok: false, message: "No encontramos la matrícula del alumno." }
   if (!isDate(input.effectiveOn)) return { ok: false, message: "Captura una fecha efectiva válida." }
   if (!input.reason.trim()) return { ok: false, message: "Indica el motivo del descuento." }
 
